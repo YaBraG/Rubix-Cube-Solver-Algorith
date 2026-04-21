@@ -399,6 +399,8 @@ GUI flow:
 - Shared face editor for both manual entry and scanned review
 - Fixed virtual centers in the editor
 - Clearly colored clickable cells with centered sticker letters
+- Keyboard shortcuts for colors: `W/Y/G/B/R/O/U` and `1-7`
+- Cell popup picker for faster color assignment
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
 - Result screen shows either solution output or clear error details in scrollable text areas
 
@@ -407,6 +409,7 @@ Camera Scan mode runs the existing live scan session, then loads the scanned col
 The editor shows live color counts before solving.
 Unknown stickers are reported first, then color-count problems are reported before the solver runs.
 The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
+When Camera Scan is launched from the GUI, scanner output is written to `scanner_log.txt` inside the generated capture session folder instead of filling the terminal.
 
 ## Project Structure
 

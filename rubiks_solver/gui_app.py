@@ -28,7 +28,31 @@ from .gui_solver import solve_editor_faces
 
 APP_TITLE = "Rubik's Cube Solver App"
 PALETTE_COLORS = ["white", "yellow", "green", "blue", "red", "orange", "unknown"]
-CELL_SIZE = 54
+COLOR_SHORTCUTS = {
+    "w": "white",
+    "y": "yellow",
+    "g": "green",
+    "b": "blue",
+    "r": "red",
+    "o": "orange",
+    "u": "unknown",
+    "1": "white",
+    "2": "yellow",
+    "3": "green",
+    "4": "blue",
+    "5": "red",
+    "6": "orange",
+    "7": "unknown",
+}
+SHORTCUT_LABELS = {
+    "white": "W/1 White",
+    "yellow": "Y/2 Yellow",
+    "green": "G/3 Green",
+    "blue": "B/4 Blue",
+    "red": "R/5 Red",
+    "orange": "O/6 Orange",
+    "unknown": "U/7 Unknown",
+}
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -45,6 +69,18 @@ def compute_window_geometry(screen_width: int, screen_height: int) -> tuple[str,
     x = max(0, (screen_width - width) // 2)
     y = max(0, (screen_height - height) // 3)
     return f"{width}x{height}+{x}+{y}", (900, 640)
+
+
+def resolve_color_shortcut(key: str) -> str | None:
+    return COLOR_SHORTCUTS.get(key.lower())
+
+
+def get_popup_color_options() -> list[str]:
+    return PALETTE_COLORS.copy()
+
+
+def build_scanner_log_path(session_dir: str | Path) -> Path:
+    return Path(session_dir) / "scanner_log.txt"
 
 
 class ScrollableFrame(ttk.Frame):
@@ -110,6 +146,8 @@ class RubiksGuiApp:
 
         self.cell_buttons: dict[tuple[str, int], tk.Button] = {}
         self.count_labels: dict[str, ttk.Label] = {}
+        self.palette_buttons: dict[str, tk.Button] = {}
+        self.active_cell_popup: tk.Toplevel | None = None
 
         self.result_heading_var = StringVar()
         self.result_message_var = StringVar()
@@ -132,6 +170,8 @@ class RubiksGuiApp:
 
     def show_home(self) -> None:
         self.hide_all_frames()
+        self.root.unbind("<Key>")
+        self.close_cell_popup()
         self.status_var.set("Choose Manual or Camera Scan.")
         self.home_frame.pack(fill="both", expand=True)
 
@@ -144,20 +184,28 @@ class RubiksGuiApp:
 
     def show_scan_setup(self) -> None:
         self.hide_all_frames()
+        self.root.unbind("<Key>")
+        self.close_cell_popup()
         self.scan_setup_frame.pack(fill="both", expand=True)
 
     def show_editor(self) -> None:
         self.hide_all_frames()
         self.refresh_editor()
         self.editor_frame.pack(fill="both", expand=True)
+        self.root.bind("<Key>", self.handle_editor_shortcut)
+        self.root.focus_force()
 
     def show_result(self, result: dict) -> None:
         self.hide_all_frames()
+        self.root.unbind("<Key>")
+        self.close_cell_popup()
         self.result_heading_var.set("Solve Success" if result["success"] else "Solve Error")
         self.result_message_var.set(
             "Solution is ready." if result["success"] else (result["error"] or "Unknown error.")
         )
-        self.result_solution_var.set(result["solution"] or ("Cube already solved." if result["success"] else ""))
+        self.result_solution_var.set(
+            result["solution"] or ("Cube already solved." if result["success"] else "")
+        )
 
         self._populate_result_rows(result["rows"])
 
@@ -167,7 +215,6 @@ class RubiksGuiApp:
                 if result["commands"]
                 else "No robot moves needed."
             )
-            self._set_text(self.result_commands_text, command_lines)
             summary_lines = [
                 "Color counts:",
                 *[f"{color}: {count}" for color, count in result["color_counts"].items()],
@@ -175,28 +222,27 @@ class RubiksGuiApp:
                 f"Move count: {result['move_count']}",
             ]
         else:
+            command_lines = result["error"] or ""
             summary_lines = [
                 "Color counts:",
                 *[f"{color}: {count}" for color, count in result["color_counts"].items()],
             ]
             if result["unknown_positions"]:
                 summary_lines.extend(["", "Unknowns:", ", ".join(result["unknown_positions"])])
-            command_lines = result["error"] or ""
 
-        self._set_text(self.result_summary_text, "\n".join(summary_lines))
         self._set_text(self.result_commands_text, command_lines)
+        self._set_text(self.result_summary_text, "\n".join(summary_lines))
         self.result_frame.pack(fill="both", expand=True)
 
     def _build_home_screen(self) -> None:
-        title = ttk.Label(self.home_frame, text=APP_TITLE, font=("Segoe UI", 24, "bold"))
-        title.pack(pady=(40, 10))
-
-        subtitle = ttk.Label(
+        ttk.Label(self.home_frame, text=APP_TITLE, font=("Segoe UI", 24, "bold")).pack(
+            pady=(40, 10)
+        )
+        ttk.Label(
             self.home_frame,
             text="Choose a workflow to enter cube colors and solve.",
             font=("Segoe UI", 12),
-        )
-        subtitle.pack(pady=(0, 20))
+        ).pack(pady=(0, 20))
 
         button_frame = ttk.Frame(self.home_frame)
         button_frame.pack(pady=18)
@@ -219,13 +265,18 @@ class RubiksGuiApp:
 
         form = ttk.Frame(self.scan_setup_frame)
         form.pack(pady=8)
-
         ttk.Label(form, text="Camera index").grid(row=0, column=0, sticky="w", padx=6, pady=6)
-        ttk.Entry(form, textvariable=self.scan_camera_var, width=12).grid(row=0, column=1, padx=6, pady=6)
+        ttk.Entry(form, textvariable=self.scan_camera_var, width=12).grid(
+            row=0, column=1, padx=6, pady=6
+        )
         ttk.Label(form, text="Grid size").grid(row=1, column=0, sticky="w", padx=6, pady=6)
-        ttk.Entry(form, textvariable=self.scan_grid_var, width=12).grid(row=1, column=1, padx=6, pady=6)
+        ttk.Entry(form, textvariable=self.scan_grid_var, width=12).grid(
+            row=1, column=1, padx=6, pady=6
+        )
         ttk.Label(form, text="Patch size").grid(row=2, column=0, sticky="w", padx=6, pady=6)
-        ttk.Entry(form, textvariable=self.scan_patch_var, width=12).grid(row=2, column=1, padx=6, pady=6)
+        ttk.Entry(form, textvariable=self.scan_patch_var, width=12).grid(
+            row=2, column=1, padx=6, pady=6
+        )
 
         ttk.Label(
             self.scan_setup_frame,
@@ -237,7 +288,9 @@ class RubiksGuiApp:
         actions = ttk.Frame(self.scan_setup_frame)
         actions.pack(pady=14)
         ttk.Button(actions, text="Back", command=self.show_home).grid(row=0, column=0, padx=8)
-        ttk.Button(actions, text="Start Scan", command=self.start_camera_scan).grid(row=0, column=1, padx=8)
+        ttk.Button(actions, text="Start Scan", command=self.start_camera_scan).grid(
+            row=0, column=1, padx=8
+        )
 
     def _build_editor_screen(self) -> None:
         top = ttk.Frame(self.editor_frame)
@@ -253,12 +306,13 @@ class RubiksGuiApp:
 
         ttk.Label(left_panel, text="Palette", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         ttk.Label(left_panel, text="Selected color:").pack(anchor="w", pady=(8, 2))
-        ttk.Label(left_panel, textvariable=self.selected_color, font=("Segoe UI", 11, "bold")).pack(anchor="w")
+        self.selected_color_label = ttk.Label(left_panel, text="", font=("Segoe UI", 11, "bold"))
+        self.selected_color_label.pack(anchor="w")
 
         palette = ttk.Frame(left_panel)
         palette.pack(anchor="w", pady=(8, 12))
         for index, color in enumerate(PALETTE_COLORS):
-            tk.Button(
+            button = tk.Button(
                 palette,
                 text=f"{DISPLAY_LETTERS[color]}  {color.title()}",
                 command=lambda selected=color: self.set_selected_color(selected),
@@ -269,24 +323,47 @@ class RubiksGuiApp:
                 activeforeground=TEXT_COLORS[color],
                 relief="raised",
                 font=("Segoe UI", 10, "bold"),
-            ).grid(row=index, column=0, sticky="ew", pady=2)
+                highlightthickness=2,
+            )
+            button.grid(row=index, column=0, sticky="ew", pady=2)
+            self.palette_buttons[color] = button
 
-        ttk.Label(left_panel, text="Live counts", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ttk.Label(left_panel, text="Shortcuts", font=("Segoe UI", 11, "bold")).pack(
+            anchor="w", pady=(4, 4)
+        )
+        for color in PALETTE_COLORS:
+            ttk.Label(left_panel, text=SHORTCUT_LABELS[color]).pack(anchor="w")
+
+        ttk.Label(left_panel, text="Live counts", font=("Segoe UI", 12, "bold")).pack(
+            anchor="w", pady=(12, 0)
+        )
         counts_frame = ttk.Frame(left_panel)
         counts_frame.pack(anchor="w", pady=(8, 10))
         for row, color in enumerate(PALETTE_COLORS):
-            ttk.Label(counts_frame, text=f"{color.title()}:").grid(row=row, column=0, sticky="w", padx=(0, 6), pady=1)
+            ttk.Label(counts_frame, text=f"{color.title()}:").grid(
+                row=row, column=0, sticky="w", padx=(0, 6), pady=1
+            )
             label = ttk.Label(counts_frame, text="0")
             label.grid(row=row, column=1, sticky="w", pady=1)
             self.count_labels[color] = label
 
         actions = ttk.Frame(left_panel)
         actions.pack(anchor="w", pady=(12, 0))
-        ttk.Button(actions, text="Back", command=self.handle_editor_back).grid(row=0, column=0, padx=4, pady=4, sticky="ew")
-        ttk.Button(actions, text="Reset", command=self.reset_editor).grid(row=0, column=1, padx=4, pady=4, sticky="ew")
-        ttk.Button(actions, text="Clear Outer Stickers", command=self.clear_outer_stickers).grid(row=1, column=0, columnspan=2, padx=4, pady=4, sticky="ew")
-        ttk.Button(actions, text="Rescan", command=self.rescan_current_session).grid(row=2, column=0, columnspan=2, padx=4, pady=4, sticky="ew")
-        ttk.Button(actions, text="Solve", command=self.solve_current_faces).grid(row=3, column=0, columnspan=2, padx=4, pady=6, sticky="ew")
+        ttk.Button(actions, text="Back", command=self.handle_editor_back).grid(
+            row=0, column=0, padx=4, pady=4, sticky="ew"
+        )
+        ttk.Button(actions, text="Reset", command=self.reset_editor).grid(
+            row=0, column=1, padx=4, pady=4, sticky="ew"
+        )
+        ttk.Button(
+            actions, text="Clear Outer Stickers", command=self.clear_outer_stickers
+        ).grid(row=1, column=0, columnspan=2, padx=4, pady=4, sticky="ew")
+        ttk.Button(actions, text="Rescan", command=self.rescan_current_session).grid(
+            row=2, column=0, columnspan=2, padx=4, pady=4, sticky="ew"
+        )
+        ttk.Button(actions, text="Solve", command=self.solve_current_faces).grid(
+            row=3, column=0, columnspan=2, padx=4, pady=6, sticky="ew"
+        )
 
         right_panel = ttk.Frame(main)
         right_panel.pack(side="left", fill="both", expand=True)
@@ -304,11 +381,7 @@ class RubiksGuiApp:
         }
         for face, (row, column) in positions.items():
             self._build_face_widget(self.editor_scroll.content, face).grid(
-                row=row,
-                column=column,
-                padx=10,
-                pady=10,
-                sticky="n",
+                row=row, column=column, padx=10, pady=10, sticky="n"
             )
 
     def _build_face_widget(self, parent: ttk.Frame, face: str) -> ttk.Frame:
@@ -325,23 +398,36 @@ class RubiksGuiApp:
                 text="",
                 width=3,
                 height=1,
-                command=lambda selected_face=face, selected_index=index: self.assign_cell_color(selected_face, selected_index),
+                command=lambda selected_face=face, selected_index=index: self.handle_cell_left_click(
+                    selected_face, selected_index
+                ),
                 font=("Segoe UI", 12, "bold"),
                 relief="raised",
                 bd=2,
             )
             button.grid(row=row, column=column, padx=2, pady=2, ipadx=10, ipady=8)
+            button.bind(
+                "<Button-3>",
+                lambda _event, selected_face=face, selected_index=index: self.assign_selected_color_to_cell(
+                    selected_face, selected_index
+                ),
+            )
             self.cell_buttons[(face, index)] = button
         return frame
 
     def _build_result_screen(self) -> None:
         top = ttk.Frame(self.result_frame)
         top.pack(fill="x", pady=(0, 8))
-        ttk.Label(top, textvariable=self.result_heading_var, font=("Segoe UI", 18, "bold")).pack(side="left")
-
-        ttk.Label(self.result_frame, textvariable=self.result_message_var, wraplength=860, justify="left").pack(
-            anchor="w", pady=(0, 8)
+        ttk.Label(top, textvariable=self.result_heading_var, font=("Segoe UI", 18, "bold")).pack(
+            side="left"
         )
+
+        ttk.Label(
+            self.result_frame,
+            textvariable=self.result_message_var,
+            wraplength=860,
+            justify="left",
+        ).pack(anchor="w", pady=(0, 8))
 
         scroller = ScrollableFrame(self.result_frame, horizontal=False)
         scroller.pack(fill="both", expand=True)
@@ -354,30 +440,46 @@ class RubiksGuiApp:
         ttk.Label(content, text="Solution", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         solution_frame = ttk.Frame(content)
         solution_frame.pack(fill="x", pady=(6, 10))
-        ttk.Label(solution_frame, textvariable=self.result_solution_var, wraplength=840, justify="left").pack(side="left", fill="x", expand=True)
-        ttk.Button(solution_frame, text="Copy Solution", command=lambda: self.copy_text(self.result_solution_var.get())).pack(side="right", padx=(8, 0))
+        ttk.Label(
+            solution_frame,
+            textvariable=self.result_solution_var,
+            wraplength=840,
+            justify="left",
+        ).pack(side="left", fill="x", expand=True)
+        ttk.Button(
+            solution_frame,
+            text="Copy Solution",
+            command=lambda: self.copy_text(self.result_solution_var.get()),
+        ).pack(side="right", padx=(8, 0))
 
         ttk.Label(content, text="Commands / Details", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         commands_frame = ttk.Frame(content)
         commands_frame.pack(fill="both", expand=True, pady=(6, 10))
-
         self.result_commands_text = tk.Text(commands_frame, height=14, wrap="word")
-        commands_scroll = ttk.Scrollbar(commands_frame, orient="vertical", command=self.result_commands_text.yview)
+        commands_scroll = ttk.Scrollbar(
+            commands_frame, orient="vertical", command=self.result_commands_text.yview
+        )
         self.result_commands_text.configure(yscrollcommand=commands_scroll.set)
         self.result_commands_text.pack(side="left", fill="both", expand=True)
         commands_scroll.pack(side="right", fill="y")
+        ttk.Button(
+            content,
+            text="Copy Commands",
+            command=lambda: self.copy_text(self.result_commands_text.get("1.0", "end-1c")),
+        ).pack(anchor="w", pady=(0, 12))
 
-        ttk.Button(content, text="Copy Commands", command=lambda: self.copy_text(self.result_commands_text.get("1.0", "end-1c"))).pack(anchor="w", pady=(0, 12))
-
-        summary_label = ttk.Label(content, text="Diagnostics", font=("Segoe UI", 12, "bold"))
-        summary_label.pack(anchor="w")
+        ttk.Label(content, text="Diagnostics", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         self.result_summary_text = tk.Text(content, height=10, wrap="word")
         self.result_summary_text.pack(fill="both", expand=True, pady=(6, 10))
 
         action_bar = ttk.Frame(self.result_frame)
         action_bar.pack(fill="x", pady=(8, 0))
-        ttk.Button(action_bar, text="Back to Editor", command=self.show_editor).pack(side="left", padx=6)
-        ttk.Button(action_bar, text="Back to Home", command=self.show_home).pack(side="left", padx=6)
+        ttk.Button(action_bar, text="Back to Editor", command=self.show_editor).pack(
+            side="left", padx=6
+        )
+        ttk.Button(action_bar, text="Back to Home", command=self.show_home).pack(
+            side="left", padx=6
+        )
 
     def _populate_result_rows(self, rows: dict[str, list[str]]) -> None:
         lines = []
@@ -400,12 +502,85 @@ class RubiksGuiApp:
 
     def set_selected_color(self, color: str) -> None:
         self.selected_color.set(color)
+        self.update_palette_selection()
 
-    def assign_cell_color(self, face: str, index: int) -> None:
+    def update_palette_selection(self) -> None:
+        selected = self.selected_color.get()
+        self.selected_color_label.config(
+            text=f"Selected: {selected.title()} ({SHORTCUT_LABELS[selected].split()[0]})"
+        )
+        for color, button in self.palette_buttons.items():
+            button.configure(
+                relief="sunken" if color == selected else "raised",
+                bd=4 if color == selected else 2,
+                highlightbackground="#111111" if color == selected else DISPLAY_COLORS[color],
+                highlightcolor="#111111" if color == selected else DISPLAY_COLORS[color],
+            )
+
+    def handle_cell_left_click(self, face: str, index: int) -> None:
+        if index not in EDITABLE_INDEXES:
+            return
+        self.show_cell_popup(face, index, self.cell_buttons[(face, index)])
+
+    def assign_selected_color_to_cell(self, face: str, index: int) -> None:
         if index not in EDITABLE_INDEXES:
             return
         self.editor_faces[face][index] = self.selected_color.get()
+        self.close_cell_popup()
         self.refresh_editor()
+        self.root.focus_force()
+
+    def assign_popup_color_to_cell(self, face: str, index: int, color: str) -> None:
+        self.editor_faces[face][index] = color
+        self.selected_color.set(color)
+        self.close_cell_popup()
+        self.refresh_editor()
+        self.root.focus_force()
+
+    def show_cell_popup(self, face: str, index: int, anchor_widget: tk.Widget) -> None:
+        self.close_cell_popup()
+        popup = tk.Toplevel(self.root)
+        popup.wm_overrideredirect(True)
+        popup.attributes("-topmost", True)
+        popup.configure(bg="#d9d9d9", padx=4, pady=4)
+
+        x = anchor_widget.winfo_rootx() + anchor_widget.winfo_width() + 6
+        y = anchor_widget.winfo_rooty()
+        popup.geometry(f"+{x}+{y}")
+        for option_index, color in enumerate(get_popup_color_options()):
+            tk.Button(
+                popup,
+                text=DISPLAY_LETTERS[color],
+                width=4,
+                bg=DISPLAY_COLORS[color],
+                fg=TEXT_COLORS[color],
+                activebackground=DISPLAY_COLORS[color],
+                activeforeground=TEXT_COLORS[color],
+                font=("Segoe UI", 10, "bold"),
+                command=lambda chosen=color: self.assign_popup_color_to_cell(face, index, chosen),
+            ).grid(row=option_index // 3, column=option_index % 3, padx=2, pady=2)
+
+        popup.bind("<FocusOut>", lambda _event: self.close_cell_popup())
+        popup.focus_force()
+        self.active_cell_popup = popup
+
+    def close_cell_popup(self) -> None:
+        if self.active_cell_popup is not None and self.active_cell_popup.winfo_exists():
+            self.active_cell_popup.destroy()
+        self.active_cell_popup = None
+
+    def handle_editor_shortcut(self, event: tk.Event) -> None:
+        if self.current_mode not in {"manual", "camera"}:
+            return
+        if self.editor_frame.winfo_manager() == "":
+            return
+        color = resolve_color_shortcut(event.keysym)
+        if color is None and event.char:
+            color = resolve_color_shortcut(event.char)
+        if color is None:
+            return
+        self.set_selected_color(color)
+        self.root.focus_force()
 
     def refresh_editor(self) -> None:
         faces = inject_virtual_centers(self.editor_faces)
@@ -418,7 +593,6 @@ class RubiksGuiApp:
                 fg=TEXT_COLORS[color],
                 activebackground=DISPLAY_COLORS[color],
                 activeforeground=TEXT_COLORS[color],
-                state="normal",
                 disabledforeground=TEXT_COLORS[color],
                 relief="sunken" if center else "raised",
                 bd=3 if center else 2,
@@ -428,7 +602,7 @@ class RubiksGuiApp:
                 button.configure(command=lambda: None)
             else:
                 button.configure(
-                    command=lambda selected_face=face, selected_index=index: self.assign_cell_color(
+                    command=lambda selected_face=face, selected_index=index: self.handle_cell_left_click(
                         selected_face, selected_index
                     )
                 )
@@ -436,18 +610,23 @@ class RubiksGuiApp:
         counts = count_editor_colors(faces)
         for color, label in self.count_labels.items():
             label.config(text=str(counts[color]))
+        self.update_palette_selection()
 
     def clear_outer_stickers(self) -> None:
+        self.close_cell_popup()
         for colors in self.editor_faces.values():
             for index in EDITABLE_INDEXES:
                 colors[index] = "unknown"
         self.refresh_editor()
 
     def reset_editor(self) -> None:
+        self.close_cell_popup()
         self.editor_faces = clone_faces(self.default_editor_faces)
         self.refresh_editor()
 
     def handle_editor_back(self) -> None:
+        self.close_cell_popup()
+        self.root.unbind("<Key>")
         if self.current_mode == "camera":
             self.show_scan_setup()
         else:
@@ -460,6 +639,7 @@ class RubiksGuiApp:
         self.start_camera_scan()
 
     def solve_current_faces(self) -> None:
+        self.close_cell_popup()
         result = solve_editor_faces(self.editor_faces)
         self.show_result(result)
 
@@ -484,10 +664,14 @@ class RubiksGuiApp:
             if grid_size is not None and grid_size <= 0:
                 raise ValueError
         except ValueError:
-            messagebox.showerror("Camera Scan", "Grid size must be a positive integer if provided.")
+            messagebox.showerror(
+                "Camera Scan", "Grid size must be a positive integer if provided."
+            )
             return
 
         session_dir = Path("captures") / f"gui_session_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+        session_dir.mkdir(parents=True, exist_ok=True)
+        log_path = build_scanner_log_path(session_dir)
         command = [
             sys.executable,
             "-m",
@@ -512,7 +696,13 @@ class RubiksGuiApp:
 
         self.root.withdraw()
         try:
-            completed = subprocess.run(command, check=False)
+            with log_path.open("w", encoding="utf-8") as log_file:
+                completed = subprocess.run(
+                    command,
+                    check=False,
+                    stdout=log_file,
+                    stderr=subprocess.STDOUT,
+                )
         finally:
             self.root.deiconify()
             self.root.lift()
@@ -520,20 +710,22 @@ class RubiksGuiApp:
         if completed.returncode != 0:
             messagebox.showerror(
                 "Camera Scan",
-                "Camera scan did not complete successfully. Review the scanner window output and try again.",
+                f"Camera scan did not complete successfully. Check scanner log: {log_path}",
             )
             return
 
         summary_path = session_dir / "session_summary.json"
         if not summary_path.exists():
-            messagebox.showerror("Camera Scan", "Scan session finished without a session_summary.json file.")
+            messagebox.showerror(
+                "Camera Scan", "Scan session finished without a session_summary.json file."
+            )
             return
 
         summary = json.loads(summary_path.read_text(encoding="utf-8"))
         if not summary.get("completed"):
             messagebox.showwarning(
                 "Camera Scan",
-                "Scan session ended before all faces were saved. Complete the scan and try again.",
+                f"Scan session ended before all faces were saved. Check scanner log: {log_path}",
             )
             return
 
@@ -547,7 +739,9 @@ class RubiksGuiApp:
         self.last_scan_session_dir = session_dir
         self.default_editor_faces = clone_faces(loaded_faces)
         self.editor_faces = clone_faces(loaded_faces)
-        self.editor_note_var.set(f"Centers are virtual and fixed. Loaded from scan session: {session_dir.name}")
+        self.editor_note_var.set(
+            f"Centers are virtual and fixed. Loaded from scan session: {session_dir.name}"
+        )
         self.show_editor()
 
 

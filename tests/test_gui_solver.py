@@ -1,5 +1,10 @@
 import json
 
+from rubiks_solver.gui_app import (
+    build_scanner_log_path,
+    get_popup_color_options,
+    resolve_color_shortcut,
+)
 from rubiks_solver.gui_models import (
     DISPLAY_COLORS,
     DISPLAY_LETTERS,
@@ -174,3 +179,44 @@ def test_display_mapping_covers_all_colors():
         assert color in DISPLAY_LETTERS
         assert DISPLAY_COLORS[color].startswith("#")
         assert TEXT_COLORS[color].startswith("#")
+
+
+def test_letter_shortcut_mapping():
+    assert resolve_color_shortcut("W") == "white"
+    assert resolve_color_shortcut("y") == "yellow"
+    assert resolve_color_shortcut("G") == "green"
+    assert resolve_color_shortcut("b") == "blue"
+    assert resolve_color_shortcut("R") == "red"
+    assert resolve_color_shortcut("o") == "orange"
+    assert resolve_color_shortcut("U") == "unknown"
+
+
+def test_number_shortcut_mapping():
+    assert resolve_color_shortcut("1") == "white"
+    assert resolve_color_shortcut("2") == "yellow"
+    assert resolve_color_shortcut("3") == "green"
+    assert resolve_color_shortcut("4") == "blue"
+    assert resolve_color_shortcut("5") == "red"
+    assert resolve_color_shortcut("6") == "orange"
+    assert resolve_color_shortcut("7") == "unknown"
+
+
+def test_invalid_shortcut_returns_no_color():
+    assert resolve_color_shortcut("9") is None
+    assert resolve_color_shortcut("q") is None
+
+
+def test_popup_color_list_contains_all_colors():
+    assert get_popup_color_options() == [
+        "white",
+        "yellow",
+        "green",
+        "blue",
+        "red",
+        "orange",
+        "unknown",
+    ]
+
+
+def test_scanner_log_path_helper(tmp_path):
+    assert build_scanner_log_path(tmp_path) == tmp_path / "scanner_log.txt"
