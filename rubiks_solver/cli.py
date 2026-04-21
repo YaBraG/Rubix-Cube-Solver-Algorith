@@ -59,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
         return 3
 
     print("Solution:")
-    print(solution if solution else "Cube already solved.")
+    print(solution or "Cube already solved.")
     print()
     print("Robot commands:")
     print(format_robot_commands(robot_commands))
