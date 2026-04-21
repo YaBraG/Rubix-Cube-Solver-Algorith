@@ -3,7 +3,7 @@ const int motorDirPin[MOTOR_COUNT] = {2, 4, 7, 8, 10, 12};
 const int motorStepPin[MOTOR_COUNT] = {3, 5, 6, 9, 11, 13};
 
 // Tune this if your driver or motor uses a different step count.
-const int STEPS_PER_REV = 200;
+const int STEPS_PER_REV = 200*4;
 // Tune this after hardware testing if 90 degrees needs more or fewer steps.
 const int STEPS_PER_90 = STEPS_PER_REV / 4;
 // Tune this delay to make the motor faster or more reliable.
