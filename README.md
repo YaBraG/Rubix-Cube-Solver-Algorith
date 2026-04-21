@@ -289,12 +289,15 @@ The center sticker is especially important because it identifies the face color.
 The color classifier is experimental and easy to tune later.
 It does not solve the full cube from camera yet.
 The scanner samples from the raw camera frame and draws overlays only on a display copy so the overlay does not affect color readings.
+It can also run a live scan session that saves all six faces one after another.
 
 Controls:
 
 - `w/a/x/d` or arrow keys move the grid
 - `s` samples the current face
 - `q` quits
+- `p` goes back one face during scan session mode
+- `r` redoes the current face during scan session mode
 - `+/-` changes grid size
 - `[/]` changes sample patch size
 
@@ -304,6 +307,9 @@ Options:
 - `--patch-size` sets the square sampling patch size in pixels
 - A larger grid helps when the default overlay is too small for the visible cube face
 - Patch size should stay smaller than the sticker interior so it samples sticker color, not black borders
+- `--scan-session` captures one face at a time and auto-advances after each `s`
+- `--output-dir` stores `u_face_scan.json` through `b_face_scan.json` plus `session_summary.json`
+- The scanner warns if the classified center sticker does not match the expected home color for that face
 
 Example commands:
 
@@ -318,6 +324,14 @@ python -m rubiks_solver.live_face_scanner --camera 0 --face U --output captures/
 ```bash
 python -m rubiks_solver.live_face_scanner --camera 1 --grid-size 320 --patch-size 18
 ```
+
+```bash
+python -m rubiks_solver.live_face_scanner --camera 1 --scan-session --grid-size 450 --patch-size 6 --output-dir captures/session_1 --force
+```
+
+In scan session mode, show one face, press `s`, let it save, then move to the next face.
+It saves `u_face_scan.json`, `r_face_scan.json`, `f_face_scan.json`, `d_face_scan.json`, `l_face_scan.json`, `b_face_scan.json`, and `session_summary.json`.
+This still does not solve the full cube from camera yet.
 
 ## Project Structure
 

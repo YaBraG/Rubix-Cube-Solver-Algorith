@@ -7,11 +7,21 @@ import copy
 import json
 from pathlib import Path
 from typing import Any
+from datetime import datetime, timezone
 
 from .image_sampling import rgb_to_hsv_degrees
 
 
 VALID_FACES = ("U", "R", "F", "D", "L", "B")
+DEFAULT_FACE_SEQUENCE = list(VALID_FACES)
+FACE_HOME_COLORS = {
+    "U": "white",
+    "R": "red",
+    "F": "green",
+    "D": "yellow",
+    "L": "orange",
+    "B": "blue",
+}
 
 
 def positive_int(value: str) -> int:
@@ -54,7 +64,87 @@ def build_parser() -> argparse.ArgumentParser:
         "--output",
         help="Optional path to save the most recent sampled face as JSON.",
     )
+    parser.add_argument(
+        "--scan-session",
+        action="store_true",
+        help="Scan all six faces in one camera session and save each face automatically.",
+    )
+    parser.add_argument(
+        "--face-sequence",
+        nargs="+",
+        help="Face order for scan session mode. Must contain U R F D L B exactly once each.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        help="Directory for scan session outputs such as u_face_scan.json and session_summary.json.",
+    )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Allow overwriting existing scan-session files.",
+    )
     return parser
+
+
+def parse_face_sequence(face_sequence: list[str] | None) -> list[str]:
+    """Validate and normalize the scan-session face sequence."""
+    if face_sequence is None:
+        return DEFAULT_FACE_SEQUENCE.copy()
+
+    normalized = [face.upper() for face in face_sequence]
+    if len(normalized) != 6:
+        raise ValueError("Face sequence must contain exactly six faces.")
+
+    invalid = [face for face in normalized if face not in VALID_FACES]
+    if invalid:
+        raise ValueError("Face sequence may only contain U, R, F, D, L, and B.")
+
+    if len(set(normalized)) != 6:
+        raise ValueError("Face sequence cannot repeat faces.")
+
+    if set(normalized) != set(VALID_FACES):
+        raise ValueError("Face sequence must contain all six faces: U, R, F, D, L, B.")
+
+    return normalized
+
+
+def get_face_output_path(output_dir: str | Path, face: str) -> Path:
+    """Return the output path for one scanned face."""
+    return Path(output_dir) / f"{face.lower()}_face_scan.json"
+
+
+def ensure_scan_session_paths(
+    output_dir: str | Path,
+    face_sequence: list[str],
+    *,
+    force: bool,
+) -> tuple[dict[str, Path], Path]:
+    """Prepare output paths and refuse unexpected overwrites unless forced."""
+    output_root = Path(output_dir)
+    face_paths = {face: get_face_output_path(output_root, face) for face in face_sequence}
+    summary_path = output_root / "session_summary.json"
+
+    existing = [str(path) for path in [*face_paths.values(), summary_path] if path.exists()]
+    if existing and not force:
+        raise FileExistsError(
+            "Refusing to overwrite existing scan-session files without --force: "
+            + ", ".join(existing)
+        )
+
+    output_root.mkdir(parents=True, exist_ok=True)
+    return face_paths, summary_path
+
+
+def get_center_color_warning(face: str | None, center_color: str | None) -> str | None:
+    """Return a warning when center color does not match the expected home color."""
+    if face is None or center_color is None:
+        return None
+
+    expected = FACE_HOME_COLORS.get(face)
+    if expected is None or center_color == expected:
+        return None
+
+    return f"Warning: expected {face} center to be {expected}, got {center_color}"
 
 
 def generate_grid_centers(center_x: int, center_y: int, size: int) -> list[tuple[int, int]]:
@@ -161,6 +251,7 @@ def build_scan_payload(
     size: int,
     sample_patch_size: int,
     samples: list[dict[str, Any]],
+    scan_session: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Build JSON payload for one sampled face."""
     payload = {
@@ -180,6 +271,8 @@ def build_scan_payload(
     }
     if face is not None:
         payload["face"] = face
+    if scan_session is not None:
+        payload["scan_session"] = scan_session
     return payload
 
 
@@ -196,6 +289,28 @@ def save_scan_payload(output_path: str | Path, payload: dict[str, Any]) -> Path:
     return output_file
 
 
+def build_session_summary_payload(
+    *,
+    camera_index: int,
+    face_sequence: list[str],
+    output_files: list[str],
+    grid_size: int,
+    patch_size: int,
+    completed: bool,
+) -> dict[str, Any]:
+    """Build a compact scan-session summary payload."""
+    return {
+        "source": "live_camera",
+        "camera_index": camera_index,
+        "face_sequence": face_sequence,
+        "output_files": output_files,
+        "grid_size": grid_size,
+        "patch_size": patch_size,
+        "completed": completed,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    }
+
+
 def print_help_summary() -> None:
     """Print keyboard help in terminal."""
     print(get_help_summary_text())
@@ -208,6 +323,8 @@ def get_help_summary_text() -> str:
             "Live scanner controls:",
             "  q = quit",
             "  s = sample current face",
+            "  p = go back one face in scan session mode",
+            "  r = redo current face in scan session mode",
             "  w/a/x/d or arrow keys = move grid",
             "  + / - = increase/decrease grid size",
             "  [ / ] = decrease/increase sample patch size",
@@ -228,6 +345,7 @@ def draw_overlay(
     sample_patch_size: int,
     preview_samples: list[dict[str, Any]] | None = None,
     face: str | None = None,
+    progress_text: str | None = None,
 ) -> None:
     """Draw 3x3 grid and optional classifications on the frame."""
     cell_size = round(size / 3)
@@ -286,10 +404,24 @@ def draw_overlay(
         2,
         cv2.LINE_AA,
     )
+    if progress_text:
+        cv2.putText(
+            frame,
+            progress_text,
+            (20, 88),
+            cv2.FONT_HERSHEY_SIMPLEX,
+            0.6,
+            (255, 255, 255),
+            2,
+            cv2.LINE_AA,
+        )
+        controls_y = 116
+    else:
+        controls_y = 88
     cv2.putText(
         frame,
-        "s sample | q quit | h help",
-        (20, 88),
+        "s sample | p back | r redo | q quit",
+        (20, controls_y),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
         (255, 255, 255),
@@ -307,6 +439,7 @@ def prepare_preview_frame(
     size: int,
     sample_patch_size: int,
     face: str | None = None,
+    progress_text: str | None = None,
 ) -> tuple[Any, list[dict[str, Any]]]:
     """Sample from raw frame and draw overlay only on a display copy."""
     # Sampling must use the raw frame. Overlay drawing happens on a copy so
@@ -328,6 +461,7 @@ def prepare_preview_frame(
         sample_patch_size=sample_patch_size,
         preview_samples=preview_samples,
         face=face,
+        progress_text=progress_text,
     )
     return display_frame, preview_samples
 
@@ -339,6 +473,10 @@ def run_live_scanner(
     *,
     grid_size: int | None = None,
     patch_size: int | None = None,
+    scan_session: bool = False,
+    face_sequence: list[str] | None = None,
+    output_dir: str | None = None,
+    force: bool = False,
 ) -> int:
     """Run the live scanner loop with OpenCV."""
     try:
@@ -346,6 +484,35 @@ def run_live_scanner(
     except ImportError:
         print("Error: OpenCV is required for live_face_scanner. Install opencv-python.")
         return 2
+
+    if scan_session and output is not None:
+        print("Error: --scan-session cannot be combined with --output.")
+        return 2
+    if scan_session and face is not None:
+        print("Error: --scan-session cannot be combined with --face.")
+        return 2
+
+    session_faces: list[str] | None = None
+    face_paths: dict[str, Path] = {}
+    summary_path: Path | None = None
+    current_face_index = 0
+    completed_faces = 0
+    saved_output_files: list[str] = []
+
+    if scan_session:
+        if output_dir is None:
+            print("Error: --output-dir is required when using --scan-session.")
+            return 2
+        try:
+            session_faces = parse_face_sequence(face_sequence)
+            face_paths, summary_path = ensure_scan_session_paths(
+                output_dir,
+                session_faces,
+                force=force,
+            )
+        except (ValueError, FileExistsError) as exc:
+            print(f"Error: {exc}")
+            return 2
 
     capture = cv2.VideoCapture(camera_index)
     if not capture.isOpened():
@@ -375,6 +542,11 @@ def run_live_scanner(
                 print("Warning: Failed to read frame from camera.")
                 break
 
+            current_face = session_faces[current_face_index] if session_faces else face
+            progress_text = None
+            if session_faces:
+                progress_text = f"Face {current_face_index + 1}/{len(session_faces)}: {current_face}"
+
             display_frame, preview_samples = prepare_preview_frame(
                 cv2,
                 raw_frame,
@@ -382,7 +554,8 @@ def run_live_scanner(
                 center_y=center_y,
                 size=size,
                 sample_patch_size=sample_patch_size,
-                face=face,
+                face=current_face,
+                progress_text=progress_text,
             )
             cv2.imshow("Rubik's Live Face Scanner", display_frame)
 
@@ -396,23 +569,76 @@ def run_live_scanner(
             elif key == ord("s"):
                 last_payload = build_scan_payload(
                     camera_index=camera_index,
-                    face=face,
+                    face=current_face,
                     center_x=center_x,
                     center_y=center_y,
                     size=size,
                     sample_patch_size=sample_patch_size,
                     samples=preview_samples,
+                    scan_session=(
+                        {
+                            "face_index": current_face_index + 1,
+                            "face_count": len(session_faces),
+                            "output_dir": str(Path(output_dir)) if session_faces and output_dir else "",
+                        }
+                        if session_faces
+                        else None
+                    ),
                 )
-                print("Sampled face:")
+                print(f"Sampled face {current_face}:")
                 for sample in preview_samples:
                     print(
                         f"  {sample['index']}: {sample['classified_color']} "
                         f"RGB={sample['rgb']} HSV={sample['hsv']}"
                     )
                 print(f"Center sticker: {last_payload['center']}")
-                if output:
+                warning = get_center_color_warning(
+                    current_face,
+                    last_payload["center"]["classified_color"],
+                )
+                if warning:
+                    print(warning)
+
+                if session_faces:
+                    save_path = face_paths[current_face]
+                    if save_path.exists() and str(save_path) in saved_output_files and not force:
+                        print(
+                            f"Error: {save_path} already exists for this session. "
+                            "Use --force to allow overwrite."
+                        )
+                        continue
+                    saved = save_scan_payload(save_path, last_payload)
+                    print(f"Saved scan: {saved}")
+                    if str(saved) not in saved_output_files:
+                        saved_output_files.append(str(saved))
+                    if current_face_index < len(session_faces) - 1:
+                        current_face_index += 1
+                        completed_faces = max(completed_faces, current_face_index)
+                    else:
+                        completed_faces = len(session_faces)
+                        summary_payload = build_session_summary_payload(
+                            camera_index=camera_index,
+                            face_sequence=session_faces,
+                            output_files=saved_output_files,
+                            grid_size=size,
+                            patch_size=sample_patch_size,
+                            completed=True,
+                        )
+                        if summary_path is not None:
+                            save_scan_payload(summary_path, summary_payload)
+                            print(f"Saved session summary: {summary_path}")
+                        print("Scan session complete.")
+                        break
+                elif output:
                     saved = save_scan_payload(output, last_payload)
                     print(f"Saved scan: {saved}")
+            elif key == ord("p"):
+                if session_faces and current_face_index > 0:
+                    current_face_index -= 1
+                    print(f"Back to face {session_faces[current_face_index]}.")
+            elif key == ord("r"):
+                if session_faces:
+                    print(f"Redo face {session_faces[current_face_index]}.")
             elif key in (ord("a"), 81):
                 center_x = max(size // 2, center_x - 10)
             elif key in (ord("d"), 83):
@@ -438,6 +664,17 @@ def run_live_scanner(
         capture.release()
         cv2.destroyAllWindows()
 
+    if session_faces and summary_path is not None and not summary_path.exists():
+        summary_payload = build_session_summary_payload(
+            camera_index=camera_index,
+            face_sequence=session_faces,
+            output_files=saved_output_files,
+            grid_size=size,
+            patch_size=sample_patch_size,
+            completed=completed_faces == len(session_faces),
+        )
+        save_scan_payload(summary_path, summary_payload)
+
     return 0
 
 
@@ -450,6 +687,10 @@ def main(argv: list[str] | None = None) -> int:
         output=args.output,
         grid_size=args.grid_size,
         patch_size=args.patch_size,
+        scan_session=args.scan_session,
+        face_sequence=args.face_sequence,
+        output_dir=args.output_dir,
+        force=args.force,
     )
 
 

@@ -3,11 +3,16 @@ import json
 from rubiks_solver.live_face_scanner import (
     build_parser,
     build_scan_payload,
+    build_session_summary_payload,
     classify_hsv_color,
     compute_default_grid_size,
+    ensure_scan_session_paths,
     generate_grid_centers,
+    get_center_color_warning,
+    get_face_output_path,
     get_help_summary_text,
     average_patch_rgb,
+    parse_face_sequence,
     prepare_preview_frame,
     positive_int,
     save_scan_payload,
@@ -106,6 +111,8 @@ def test_help_summary_text_matches_controls():
 
     assert "w/a/x/d or arrow keys = move grid" in text
     assert "s = sample current face" in text
+    assert "p = go back one face in scan session mode" in text
+    assert "r = redo current face in scan session mode" in text
     assert "WASD" not in text
 
 
@@ -189,3 +196,91 @@ def test_prepare_preview_frame_samples_raw_frame_only():
     assert preview_samples[4]["rgb"] == {"r": 255, "g": 0, "b": 0}
     assert display_frame[1][1] == [255, 255, 255]
     assert raw_frame[1][1] == [0, 0, 255]
+
+
+def test_default_face_sequence():
+    assert parse_face_sequence(None) == ["U", "R", "F", "D", "L", "B"]
+
+
+def test_custom_face_sequence_parsing():
+    assert parse_face_sequence(["u", "r", "f", "d", "l", "b"]) == ["U", "R", "F", "D", "L", "B"]
+
+
+def test_invalid_face_sequence_rejected():
+    try:
+        parse_face_sequence(["U", "R", "F", "D", "L", "X"])
+        assert False, "parse_face_sequence should fail for invalid face"
+    except ValueError as exc:
+        assert "U, R, F, D, L, and B" in str(exc)
+
+
+def test_repeated_face_sequence_rejected():
+    try:
+        parse_face_sequence(["U", "R", "F", "D", "L", "L"])
+        assert False, "parse_face_sequence should fail for repeated face"
+    except ValueError as exc:
+        assert "cannot repeat" in str(exc)
+
+
+def test_missing_face_sequence_rejected():
+    try:
+        parse_face_sequence(["U", "R", "F", "D", "L"])
+        assert False, "parse_face_sequence should fail for missing face"
+    except ValueError as exc:
+        assert "exactly six faces" in str(exc)
+
+
+def test_face_output_path_generation(tmp_path):
+    assert get_face_output_path(tmp_path, "U") == tmp_path / "u_face_scan.json"
+
+
+def test_refusing_overwrite_without_force(tmp_path):
+    existing = tmp_path / "u_face_scan.json"
+    existing.write_text("{}", encoding="utf-8")
+
+    try:
+        ensure_scan_session_paths(tmp_path, ["U", "R", "F", "D", "L", "B"], force=False)
+        assert False, "ensure_scan_session_paths should fail when files already exist"
+    except FileExistsError as exc:
+        assert "u_face_scan.json" in str(exc)
+
+
+def test_allowing_overwrite_with_force(tmp_path):
+    existing = tmp_path / "u_face_scan.json"
+    existing.write_text("{}", encoding="utf-8")
+
+    face_paths, summary_path = ensure_scan_session_paths(
+        tmp_path,
+        ["U", "R", "F", "D", "L", "B"],
+        force=True,
+    )
+
+    assert face_paths["U"] == tmp_path / "u_face_scan.json"
+    assert summary_path == tmp_path / "session_summary.json"
+
+
+def test_session_summary_payload():
+    payload = build_session_summary_payload(
+        camera_index=1,
+        face_sequence=["U", "R", "F", "D", "L", "B"],
+        output_files=["captures/u_face_scan.json"],
+        grid_size=450,
+        patch_size=6,
+        completed=True,
+    )
+
+    assert payload["camera_index"] == 1
+    assert payload["face_sequence"] == ["U", "R", "F", "D", "L", "B"]
+    assert payload["grid_size"] == 450
+    assert payload["patch_size"] == 6
+    assert payload["completed"] is True
+    assert payload["output_files"] == ["captures/u_face_scan.json"]
+    assert "timestamp" in payload
+
+
+def test_center_warning_helper():
+    warning = get_center_color_warning("U", "yellow")
+
+    assert warning == "Warning: expected U center to be white, got yellow"
+    assert get_center_color_warning("U", "white") is None
+    assert get_center_color_warning(None, "white") is None
