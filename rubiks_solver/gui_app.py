@@ -24,6 +24,7 @@ from .gui_models import (
     load_editor_faces_from_session,
 )
 from .gui_solver import solve_editor_faces
+from .motor_serial import MotorSerialError, list_serial_ports, ping_arduino_port, send_commands_on_port
 
 
 APP_TITLE = "Rubik's Cube Solver App"
@@ -131,6 +132,7 @@ class RubiksGuiApp:
         self.default_editor_faces = create_empty_editor_faces()
         self.last_scan_session_dir: Path | None = None
         self.last_scan_settings = {"camera": "0", "grid_size": "", "patch_size": "6"}
+        self.latest_result: dict | None = None
 
         self.container = ttk.Frame(self.root, padding=10)
         self.container.pack(fill="both", expand=True)
@@ -152,6 +154,8 @@ class RubiksGuiApp:
         self.result_heading_var = StringVar()
         self.result_message_var = StringVar()
         self.result_solution_var = StringVar()
+        self.motor_port_var = StringVar(value="")
+        self.motor_status_var = StringVar(value="Motor status: not connected.")
 
         self._build_home_screen()
         self._build_scan_setup_screen()
@@ -199,6 +203,7 @@ class RubiksGuiApp:
         self.hide_all_frames()
         self.root.unbind("<Key>")
         self.close_cell_popup()
+        self.latest_result = result
         self.result_heading_var.set("Solve Success" if result["success"] else "Solve Error")
         self.result_message_var.set(
             "Solution is ready." if result["success"] else (result["error"] or "Unknown error.")
@@ -232,6 +237,8 @@ class RubiksGuiApp:
 
         self._set_text(self.result_commands_text, command_lines)
         self._set_text(self.result_summary_text, "\n".join(summary_lines))
+        self.refresh_motor_ports()
+        self.update_motor_section_state(result["success"])
         self.result_frame.pack(fill="both", expand=True)
 
     def _build_home_screen(self) -> None:
@@ -472,6 +479,22 @@ class RubiksGuiApp:
         self.result_summary_text = tk.Text(content, height=10, wrap="word")
         self.result_summary_text.pack(fill="both", expand=True, pady=(6, 10))
 
+        ttk.Label(content, text="Motor / Arduino", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        motor_frame = ttk.Frame(content)
+        motor_frame.pack(fill="x", pady=(6, 10))
+        ttk.Label(motor_frame, text="COM port").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=4)
+        self.motor_port_entry = ttk.Combobox(motor_frame, textvariable=self.motor_port_var, width=18)
+        self.motor_port_entry.grid(row=0, column=1, sticky="w", padx=(0, 8), pady=4)
+        self.motor_refresh_button = ttk.Button(motor_frame, text="Refresh Ports", command=self.refresh_motor_ports)
+        self.motor_refresh_button.grid(row=0, column=2, sticky="w", padx=4, pady=4)
+        self.motor_ping_button = ttk.Button(motor_frame, text="Ping Arduino", command=self.ping_motor_port)
+        self.motor_ping_button.grid(row=0, column=3, sticky="w", padx=4, pady=4)
+        self.motor_send_button = ttk.Button(motor_frame, text="Send All Commands", command=self.send_motor_commands)
+        self.motor_send_button.grid(row=0, column=4, sticky="w", padx=4, pady=4)
+        ttk.Label(motor_frame, textvariable=self.motor_status_var, wraplength=860, justify="left").grid(
+            row=1, column=0, columnspan=5, sticky="w", pady=(4, 0)
+        )
+
         action_bar = ttk.Frame(self.result_frame)
         action_bar.pack(fill="x", pady=(8, 0))
         ttk.Button(action_bar, text="Back to Editor", command=self.show_editor).pack(
@@ -499,6 +522,61 @@ class RubiksGuiApp:
         self.root.clipboard_clear()
         self.root.clipboard_append(value)
         self.root.update()
+
+    def refresh_motor_ports(self) -> None:
+        try:
+            ports = list_serial_ports()
+        except MotorSerialError as exc:
+            self.motor_status_var.set(f"Motor status: {exc}")
+            self.motor_port_entry["values"] = ()
+            return
+
+        self.motor_port_entry["values"] = ports
+        if ports and not self.motor_port_var.get():
+            self.motor_port_var.set(ports[0])
+        self.motor_status_var.set("Motor status: ports refreshed." if ports else "Motor status: no COM ports found.")
+
+    def update_motor_section_state(self, solve_success: bool) -> None:
+        state = "normal" if solve_success else "disabled"
+        self.motor_ping_button.config(state=state)
+        self.motor_send_button.config(state=state)
+        self.motor_port_entry.config(state="readonly" if solve_success else "disabled")
+        self.motor_refresh_button.config(state="normal")
+        if not solve_success:
+            self.motor_status_var.set("Motor status: solve must succeed before sending commands.")
+
+    def ping_motor_port(self) -> None:
+        port = self.motor_port_var.get().strip()
+        if not port:
+            self.motor_status_var.set("Motor status: choose a COM port first.")
+            return
+        try:
+            response = ping_arduino_port(port)
+        except MotorSerialError as exc:
+            self.motor_status_var.set(f"Motor status: {exc}")
+            messagebox.showerror("Motor / Arduino", str(exc))
+            return
+        self.motor_status_var.set(f"Motor status: {response} on {port}.")
+
+    def send_motor_commands(self) -> None:
+        port = self.motor_port_var.get().strip()
+        if not port:
+            self.motor_status_var.set("Motor status: choose a COM port first.")
+            return
+        if not self.latest_result or not self.latest_result.get("success"):
+            self.motor_status_var.set("Motor status: no successful solution available.")
+            return
+        commands = [(item["color"], item["angle"]) for item in self.latest_result.get("commands", [])]
+        if not commands:
+            self.motor_status_var.set("Motor status: no commands to send.")
+            return
+        try:
+            send_commands_on_port(port, commands)
+        except MotorSerialError as exc:
+            self.motor_status_var.set(f"Motor status: {exc}")
+            messagebox.showerror("Motor / Arduino", str(exc))
+            return
+        self.motor_status_var.set(f"Motor status: sent {len(commands)} commands to {port}.")
 
     def set_selected_color(self, color: str) -> None:
         self.selected_color.set(color)

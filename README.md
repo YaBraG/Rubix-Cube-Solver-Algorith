@@ -15,6 +15,7 @@ adds a Tkinter desktop app for the main user workflow.
 - Samples RGB and HSV values from manual image coordinates for debugging.
 - Scans one face at a time from a live camera feed with a 3x3 overlay.
 - Launches a desktop GUI app for manual entry and camera review.
+- Can send solved color+angle commands to a 6-motor Arduino over serial.
 - Validates basic input rules before solving.
 - Solves the cube with the `kociemba` Python package.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
@@ -23,7 +24,7 @@ adds a Tkinter desktop app for the main user workflow.
 Robot-friendly output currently means:
 
 - Colored face plus angle only.
-- No motor control yet.
+- A simple Arduino serial control path now exists for six mapped motors.
 - `90` means clockwise.
 - `-90` means counter-clockwise.
 - `180` means half turn.
@@ -33,8 +34,8 @@ Robot-friendly output currently means:
 
 - It does not do image capture or image processing yet.
 - It does not read two pictures of the cube yet.
-- It does not control a robot yet.
-- It does not convert face turns into hardware or motor commands yet.
+- It does not control a full robot mechanism yet.
+- It does not include advanced motion planning or hardware safety logic yet.
 - It does not auto-detect the cube orientation yet.
 
 Image capture from 2 pictures with 3 visible faces per picture is planned for a later step.
@@ -62,6 +63,12 @@ Launch the desktop app:
 
 ```bash
 python -m rubiks_solver.gui_app
+```
+
+List Arduino serial ports:
+
+```bash
+python -m rubiks_solver.motor_serial --list
 ```
 
 Solve a cube from a 54-character facelet state string:
@@ -403,6 +410,7 @@ GUI flow:
 - Cell popup picker for faster color assignment
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
 - Result screen shows either solution output or clear error details in scrollable text areas
+- Solve success screen includes COM port tools to ping Arduino and send all motor commands
 
 Manual mode starts with virtual centers fixed and outer stickers set to unknown.
 Camera Scan mode runs the existing live scan session, then loads the scanned colors into the same editor screen.
@@ -410,6 +418,52 @@ The editor shows live color counts before solving.
 Unknown stickers are reported first, then color-count problems are reported before the solver runs.
 The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
 When Camera Scan is launched from the GUI, scanner output is written to `scanner_log.txt` inside the generated capture session folder instead of filling the terminal.
+The GUI result screen can refresh COM ports, ping Arduino, and send all solved commands in order.
+
+## Arduino Motor Control
+
+Arduino sketch lives at:
+
+- `arduino_code/motor_control/motor_control.ino`
+
+Upload it to the Arduino that drives the six stepper channels.
+The sketch listens on serial at `115200` baud.
+
+Serial protocol:
+
+- `PING`
+- `MOVE <motor_index> <angle>`
+- `STOP`
+
+Example replies:
+
+- `OK PONG`
+- `OK MOVING 1 90 50`
+- `OK DONE`
+- `ERR invalid angle`
+
+Python serial helper:
+
+```bash
+python -m rubiks_solver.motor_serial --list
+python -m rubiks_solver.motor_serial --port COM3 --ping
+python -m rubiks_solver.motor_serial --port COM3 --move 0 90
+```
+
+Default color-to-motor map:
+
+- `white = 0`
+- `red = 1`
+- `green = 2`
+- `yellow = 3`
+- `orange = 4`
+- `blue = 5`
+
+Tuning notes:
+
+- Arduino `STEP_DELAY_US` controls step speed
+- Arduino `STEPS_PER_90` controls how many steps equal one face turn
+- Arduino direction can be flipped per motor by changing the direction pin logic if hardware rotation is backwards
 
 ## Project Structure
 
@@ -428,6 +482,7 @@ rubiks_solver/
   image_sampler.py
   image_sampling.py
   live_face_scanner.py
+  motor_serial.py
   point_picker.py
   robot_moves.py
   session_solver.py
@@ -440,6 +495,7 @@ tests/
   test_gui_solver.py
   test_image_sampling.py
   test_live_face_scanner.py
+  test_motor_serial.py
   test_point_picker.py
   test_robot_moves.py
   test_session_solver.py
@@ -453,4 +509,7 @@ test_pictures/
   sample_points_photo_2_template.json
 requirements.txt
 README.md
+arduino_code/
+  motor_control/
+    motor_control.ino
 ```
