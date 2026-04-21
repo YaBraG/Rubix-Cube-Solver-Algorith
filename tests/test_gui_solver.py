@@ -1,6 +1,9 @@
 import json
 
 from rubiks_solver.gui_models import (
+    DISPLAY_COLORS,
+    DISPLAY_LETTERS,
+    TEXT_COLORS,
     count_editor_colors,
     create_empty_editor_faces,
     inject_virtual_centers,
@@ -65,6 +68,24 @@ def test_color_count_validation_and_unknown_detection():
     assert summary["color_counts"]["unknown"] == 48
     assert "U0" in summary["unknown_positions"]
     assert "B8" in summary["unknown_positions"]
+
+
+def test_gui_solve_helper_catches_wrong_color_counts_before_solver():
+    faces = {
+        "U": ["white"] * 9,
+        "R": ["red"] * 9,
+        "F": ["green"] * 9,
+        "D": ["yellow"] * 9,
+        "L": ["orange"] * 8 + ["white"],
+        "B": ["blue"] * 9,
+    }
+
+    result = solve_editor_faces(faces)
+
+    assert result["success"] is False
+    assert "Color counts are invalid" in result["error"]
+    assert "white: 10" in result["error"]
+    assert "orange: 8" in result["error"]
 
 
 def test_solving_solved_cube_state_through_gui_helper():
@@ -144,3 +165,12 @@ def test_count_editor_colors_orders_known_and_unknown():
     assert counts["red"] == 1
     assert counts["orange"] == 1
     assert counts["unknown"] == 48
+
+
+def test_display_mapping_covers_all_colors():
+    for color in ("white", "yellow", "green", "blue", "red", "orange", "unknown"):
+        assert color in DISPLAY_COLORS
+        assert color in TEXT_COLORS
+        assert color in DISPLAY_LETTERS
+        assert DISPLAY_COLORS[color].startswith("#")
+        assert TEXT_COLORS[color].startswith("#")

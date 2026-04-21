@@ -5,7 +5,13 @@ from __future__ import annotations
 from typing import Any
 
 from .color_state import PRIMARY_COLOR_TO_FACE
-from .gui_models import editor_faces_to_color_lists, summarize_editor_state, unknown_positions
+from .gui_models import (
+    count_editor_colors,
+    editor_faces_to_color_lists,
+    summarize_count_errors,
+    summarize_editor_state,
+    unknown_positions,
+)
 from .live_face_scanner import DEFAULT_FACE_SEQUENCE
 from .robot_moves import convert_solution_to_robot_commands
 from .solver import CubeSolveError, solve_cube
@@ -49,6 +55,17 @@ def solve_editor_faces(faces: dict[str, list[str]]) -> dict[str, Any]:
             solution=None,
             commands=[],
             error=f"Unknown stickers remain: {', '.join(unknowns)}.",
+        )
+
+    color_counts = count_editor_colors(faces)
+    count_errors = summarize_count_errors(color_counts)
+    if count_errors["over"] or count_errors["under"]:
+        detail = count_errors["over"] + count_errors["under"]
+        return build_result_payload(
+            faces=faces,
+            solution=None,
+            commands=[],
+            error="Color counts are invalid: " + ", ".join(detail) + ".",
         )
 
     try:

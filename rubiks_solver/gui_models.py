@@ -12,6 +12,7 @@ from .session_solver import extract_session_faces, load_scan_session
 
 
 UNKNOWN_COLOR = "unknown"
+KNOWN_COLORS = tuple(DEFAULT_FACE_TO_PRIMARY_COLOR.values())
 DISPLAY_LETTERS = {
     "white": "W",
     "yellow": "Y",
@@ -83,8 +84,14 @@ def count_editor_colors(faces: dict[str, list[str]]) -> dict[str, int]:
     counts = Counter()
     for colors in inject_virtual_centers(faces).values():
         counts.update(colors)
-    ordered = list(DEFAULT_FACE_TO_PRIMARY_COLOR.values()) + [UNKNOWN_COLOR]
+    ordered = list(KNOWN_COLORS) + [UNKNOWN_COLOR]
     return {color: counts.get(color, 0) for color in ordered}
+
+
+def summarize_count_errors(color_counts: dict[str, int]) -> dict[str, list[str]]:
+    over = [f"{color}: {color_counts.get(color, 0)}" for color in KNOWN_COLORS if color_counts.get(color, 0) > 9]
+    under = [f"{color}: {color_counts.get(color, 0)}" for color in KNOWN_COLORS if color_counts.get(color, 0) < 9]
+    return {"over": over, "under": under}
 
 
 def unknown_positions(faces: dict[str, list[str]]) -> list[str]:

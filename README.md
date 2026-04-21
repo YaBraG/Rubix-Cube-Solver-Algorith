@@ -398,11 +398,14 @@ GUI flow:
 - Home screen with `Manual` and `Camera Scan`
 - Shared face editor for both manual entry and scanned review
 - Fixed virtual centers in the editor
+- Clearly colored clickable cells with centered sticker letters
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
-- Result screen shows either solution output or clear error details
+- Result screen shows either solution output or clear error details in scrollable text areas
 
 Manual mode starts with virtual centers fixed and outer stickers set to unknown.
 Camera Scan mode runs the existing live scan session, then loads the scanned colors into the same editor screen.
+The editor shows live color counts before solving.
+Unknown stickers are reported first, then color-count problems are reported before the solver runs.
 The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
 
 ## Project Structure
