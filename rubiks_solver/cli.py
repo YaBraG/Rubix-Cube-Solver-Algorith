@@ -82,8 +82,9 @@ def resolve_cube_state_input(
         parser.error("Face arguments require --faces.")
 
     if args.faces:
-        missing_faces = [face for face in FACE_ORDER if not face_values[face]]
-        if missing_faces:
+        if missing_faces := [
+            face for face in FACE_ORDER if not face_values[face]
+        ]:
             joined = ", ".join(f"--{face.lower()}" for face in missing_faces)
             parser.error(f"--faces requires all six face arguments. Missing: {joined}.")
         return assemble_faces_to_facelet_string(

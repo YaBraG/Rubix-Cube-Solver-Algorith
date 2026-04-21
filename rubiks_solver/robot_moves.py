@@ -41,11 +41,10 @@ def convert_solution_to_robot_commands(
     solution: str, face_color_mapping: dict[str, str] | None = None
 ) -> list[tuple[str, int]]:
     """Convert full Rubik's notation solution string into robot commands."""
-    normalized = solution.strip()
-    if not normalized:
+    if normalized := solution.strip():
+        return [
+            convert_move_to_robot_command(move, face_color_mapping)
+            for move in normalized.split()
+        ]
+    else:
         return []
-
-    return [
-        convert_move_to_robot_command(move, face_color_mapping)
-        for move in normalized.split()
-    ]

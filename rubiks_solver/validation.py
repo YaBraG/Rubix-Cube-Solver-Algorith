@@ -21,8 +21,7 @@ def validate_cube_state(cube_state: str) -> str:
             f"Cube state must be {EXPECTED_LENGTH} characters long."
         )
 
-    invalid_chars = sorted(set(normalized) - VALID_FACELETS)
-    if invalid_chars:
+    if invalid_chars := sorted(set(normalized) - VALID_FACELETS):
         joined = ", ".join(invalid_chars)
         raise CubeValidationError(
             f"Cube state contains invalid face letters: {joined}."
