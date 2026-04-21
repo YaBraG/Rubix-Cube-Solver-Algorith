@@ -5,9 +5,11 @@ import pytest
 from rubiks_solver.motor_serial import (
     DEFAULT_COLOR_TO_MOTOR_MAP,
     MotorSerialError,
+    drain_startup_lines,
     format_config_command,
     format_move_command,
     list_serial_ports,
+    ping_arduino,
     request_arduino_config,
     resolve_color_motor,
     send_color_angle_commands,
@@ -31,6 +33,11 @@ class FakeSerial:
         if self.responses:
             return self.responses.pop(0)
         return b""
+
+
+class FakeSerialTimeoutThenPong(FakeSerial):
+    def __init__(self):
+        super().__init__(["OK READY", "", "OK PONG"])
 
 
 def test_command_formatting():
@@ -92,6 +99,41 @@ def test_request_config_reads_ok_config_response():
 
     assert response.startswith("OK CONFIG")
     assert fake.writes == ["CONFIG?\n"]
+
+
+def test_ping_handles_ok_ready_then_ok_pong():
+    fake = FakeSerial(["OK READY", "OK PONG"])
+
+    response = ping_arduino(fake)
+
+    assert response == "OK PONG"
+    assert fake.writes == ["PING\n"]
+
+
+def test_ping_retries_after_timeout_then_succeeds():
+    fake = FakeSerialTimeoutThenPong()
+
+    response = ping_arduino(fake)
+
+    assert response == "OK PONG"
+    assert fake.writes == ["PING\n", "PING\n"]
+
+
+def test_timeout_error_includes_serial_monitor_warning():
+    fake = FakeSerial(["", "", ""])
+
+    with pytest.raises(MotorSerialError) as exc:
+        ping_arduino(fake)
+
+    assert "close Arduino Serial Monitor" in str(exc.value)
+
+
+def test_drain_startup_lines_collects_ready_message():
+    fake = FakeSerial(["OK READY", "OK CONFIG TEST", ""])
+
+    lines = drain_startup_lines(fake)
+
+    assert lines == ["OK READY", "OK CONFIG TEST"]
 
 
 def test_list_ports_uses_serial_tools(monkeypatch):

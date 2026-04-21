@@ -166,6 +166,8 @@ void setup() {
     digitalWrite(motorStepPin[index], LOW);
   }
   Serial.begin(115200);
+  delay(1000);
+  Serial.println("OK READY");
 }
 
 void loop() {

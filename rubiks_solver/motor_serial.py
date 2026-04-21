@@ -9,6 +9,8 @@ from typing import Any
 
 BAUD_RATE = 115200
 SERIAL_TIMEOUT = 2.0
+STARTUP_WAIT_SECONDS = 3.0
+PING_RETRIES = 3
 VALID_MOTOR_INDEXES = tuple(range(6))
 VALID_ANGLES = (-180, -90, 90, 180)
 DEFAULT_COLOR_TO_MOTOR_MAP = {
@@ -71,9 +73,12 @@ def open_serial_connection(port: str, *, timeout: float = SERIAL_TIMEOUT) -> Any
         connection = serial.Serial(port=port, baudrate=BAUD_RATE, timeout=timeout, write_timeout=timeout)
     except Exception as exc:
         raise MotorSerialError(f"Could not open serial port {port}.") from exc
-    time.sleep(1.5)
+    time.sleep(STARTUP_WAIT_SECONDS)
     if hasattr(connection, "reset_input_buffer"):
-        connection.reset_input_buffer()
+        try:
+            connection.reset_input_buffer()
+        except Exception:
+            pass
     return connection
 
 
@@ -94,6 +99,13 @@ def _read_response(connection: Any) -> str:
     return text
 
 
+def _timeout_help_message() -> str:
+    return (
+        "No response from Arduino. Check COM port, baud 115200, uploaded sketch, "
+        "and close Arduino Serial Monitor."
+    )
+
+
 def _expect_ok(response: str) -> str:
     if response.startswith("ERR"):
         raise MotorSerialError(response)
@@ -102,12 +114,65 @@ def _expect_ok(response: str) -> str:
     return response
 
 
-def ping_arduino(connection: Any) -> str:
-    _write_command(connection, format_ping_command())
-    response = _expect_ok(_read_response(connection))
-    if response != "OK PONG":
-        raise MotorSerialError(f"Unexpected ping response: {response}")
-    return response
+def _debug_log(enabled: bool, message: str) -> None:
+    if enabled:
+        print(message)
+
+
+def drain_startup_lines(connection: Any, *, debug: bool = False, max_lines: int = 8) -> list[str]:
+    lines: list[str] = []
+    for _ in range(max_lines):
+        try:
+            raw = connection.readline()
+        except Exception:
+            break
+
+        if isinstance(raw, bytes):
+            text = raw.decode("utf-8", errors="replace").strip()
+        else:
+            text = str(raw).strip()
+
+        if not text:
+            break
+        lines.append(text)
+        _debug_log(debug, f"startup: {text}")
+    return lines
+
+
+def ping_arduino(connection: Any, *, retries: int = PING_RETRIES, debug: bool = False) -> str:
+    last_error: MotorSerialError | None = None
+    for _attempt in range(retries):
+        _debug_log(debug, f"send: {format_ping_command()}")
+        _write_command(connection, format_ping_command())
+        for _read_attempt in range(2):
+            try:
+                response = _read_response(connection)
+                _debug_log(debug, f"recv: {response}")
+            except MotorSerialError as exc:
+                last_error = exc
+                _debug_log(debug, f"recv error: {exc}")
+                break
+
+            if response == "OK READY":
+                last_error = MotorSerialError("Arduino was still starting up.")
+                _debug_log(debug, "recv startup line: OK READY")
+                continue
+
+            try:
+                response = _expect_ok(response)
+            except MotorSerialError as exc:
+                last_error = exc
+                _debug_log(debug, f"recv error: {exc}")
+                break
+
+            if response == "OK PONG":
+                return response
+
+            last_error = MotorSerialError(f"Unexpected ping response: {response}")
+            _debug_log(debug, f"recv error: {last_error}")
+            break
+
+    raise MotorSerialError(_timeout_help_message()) from last_error
 
 
 def request_arduino_config(connection: Any) -> str:
@@ -151,10 +216,15 @@ def send_color_angle_commands(
     return responses
 
 
-def ping_arduino_port(port: str, *, timeout: float = SERIAL_TIMEOUT) -> str:
+def ping_arduino_port(
+    port: str,
+    *,
+    timeout: float = SERIAL_TIMEOUT,
+    debug: bool = False,
+) -> str:
     connection = open_serial_connection(port, timeout=timeout)
     try:
-        return ping_arduino(connection)
+        return ping_arduino(connection, debug=debug)
     finally:
         connection.close()
 
@@ -199,6 +269,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--ping", action="store_true", help="Ping the Arduino on the selected port.")
     parser.add_argument("--config", action="store_true", help="Read Arduino motor configuration.")
     parser.add_argument(
+        "--timeout",
+        type=float,
+        default=SERIAL_TIMEOUT,
+        help="Serial timeout in seconds. Default: 2.0.",
+    )
+    parser.add_argument(
+        "--debug-serial",
+        action="store_true",
+        help="Print startup lines and raw ping handshake info.",
+    )
+    parser.add_argument(
         "--move",
         nargs=2,
         metavar=("MOTOR", "ANGLE"),
@@ -220,13 +301,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.ping:
             if not args.port:
                 parser.error("--ping requires --port.")
-            print(ping_arduino_port(args.port))
+            print(ping_arduino_port(args.port, timeout=args.timeout, debug=args.debug_serial))
             return 0
 
         if args.config:
             if not args.port:
                 parser.error("--config requires --port.")
-            print(request_config_on_port(args.port))
+            print(request_config_on_port(args.port, timeout=args.timeout))
             return 0
 
         if args.move:
@@ -234,7 +315,7 @@ def main(argv: list[str] | None = None) -> int:
                 parser.error("--move requires --port.")
             motor_index = int(args.move[0])
             angle = int(args.move[1])
-            for line in move_motor_on_port(args.port, motor_index, angle):
+            for line in move_motor_on_port(args.port, motor_index, angle, timeout=args.timeout):
                 print(line)
             return 0
 

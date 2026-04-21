@@ -428,6 +428,7 @@ Arduino sketch lives at:
 
 Upload it to the Arduino that drives the six stepper channels.
 The sketch listens on serial at `115200` baud.
+On startup it prints `OK READY`.
 The motor is a `0.9 degree` stepper, so it has `400` full steps per revolution.
 `MICROSTEPS` in the sketch must match the real A4988 jumper setting.
 
@@ -441,6 +442,7 @@ Serial protocol:
 
 Example replies:
 
+- `OK READY`
 - `OK PONG`
 - `OK CONFIG MOTOR_FULL_STEPS_PER_REV=400 MICROSTEPS=1 STEPS_PER_REV=400 STEPS_PER_90=100 STEP_DELAY_US=2000`
 - `OK MOVING 1 90 50`
@@ -453,8 +455,12 @@ Python serial helper:
 python -m rubiks_solver.motor_serial --list
 python -m rubiks_solver.motor_serial --port COM3 --ping
 python -m rubiks_solver.motor_serial --port COM3 --config
+python -m rubiks_solver.motor_serial --port COM3 --timeout 5 --ping
 python -m rubiks_solver.motor_serial --port COM3 --move 0 90
 ```
+
+Close Arduino Serial Monitor before using Python or the GUI on the same port.
+If ping times out, try `--timeout 5`.
 
 Default color-to-motor map:
 
