@@ -61,8 +61,7 @@ def normalize_color_tokens(
             f"Accepted tokens: {ACCEPTED_COLOR_TOKENS}."
         )
 
-    unknown_colors = sorted(set(tokens) - set(mapping))
-    if unknown_colors:
+    if unknown_colors := sorted(set(tokens) - set(mapping)):
         joined = ", ".join(unknown_colors)
         raise ColorStateError(
             f"{input_name} contains unknown tokens: {joined}. "

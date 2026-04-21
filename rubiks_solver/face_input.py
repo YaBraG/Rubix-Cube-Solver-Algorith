@@ -59,8 +59,9 @@ def assemble_faces(
         raise FaceInputError(f"Unsupported face orientation preset: {orientation_preset}.")
 
     preset = FACE_ROTATION_PRESETS[orientation_preset]
-    missing_faces = [face for face in FACE_ORDER if face not in face_inputs]
-    if missing_faces:
+    if missing_faces := [
+        face for face in FACE_ORDER if face not in face_inputs
+    ]:
         joined = ", ".join(missing_faces)
         raise FaceInputError(f"Missing face inputs: {joined}.")
 
