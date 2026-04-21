@@ -7,6 +7,8 @@ These images are reference assets for the future two-picture workflow only.
 Users can manually read these pictures and test the solver with `--faces`.
 The program still does not detect sticker colors automatically.
 Capture instructions are available with `python -m rubiks_solver.cli --capture-guide`.
+Static picture tools are now debug/reference tools.
+Live camera scanning is the main direction going forward.
 
 Current sample picture paths:
 

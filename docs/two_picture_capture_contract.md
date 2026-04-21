@@ -18,6 +18,8 @@ Automatic image processing is still not implemented.
 Image sampling debug now exists with manual coordinate JSON files.
 It is meant to help tune future color detection, not replace it.
 Point picker now exists as the current bridge between sample photos and sampler reports.
+Live camera scanning is now being introduced as the main product path.
+Older point-picker and static sample tools remain useful for debugging and tuning.
 
 ## Current Confirmed Orientation
 
