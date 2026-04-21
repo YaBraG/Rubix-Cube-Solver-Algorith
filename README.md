@@ -3,14 +3,15 @@
 Python scaffold for solving a Rubik's Cube from either a manual 54-character cube state
 string or a 54-sticker color-name state. Current version validates input, converts color
 input or manual per-face input into the internal Kociemba facelet format, solves the cube
-with the `kociemba` package, and converts the solution into simple robot-friendly color and
-angle commands.
+with the `kociemba` package, converts the solution into simple robot-friendly color and
+angle commands, and includes a first image-debug sampling tool.
 
 ## What This Project Does Right Now
 
 - Accepts a cube state string in standard Kociemba facelet order.
 - Accepts a 54-sticker color input string with fast one-letter tokens or full color names and converts it into facelets.
 - Accepts manual picture-assisted `--faces` input for one face at a time.
+- Samples RGB and HSV values from manual image coordinates for debugging.
 - Validates basic input rules before solving.
 - Solves the cube with the `kociemba` Python package.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
@@ -231,6 +232,24 @@ The project still does not process images automatically yet.
 Folder notes live in [test_pictures/README.md](test_pictures/README.md).
 Manual capture instructions are available from `python -m rubiks_solver.cli --capture-guide`.
 
+## Image Sampling Debug
+
+First image-debug tool lives in `python -m rubiks_solver.image_sampler`.
+It samples manually provided pixel coordinates from an image and writes a JSON report with RGB and HSV values.
+It does not detect stickers automatically and it does not solve from images yet.
+This helps inspect lighting, color separation, and red/orange differences before future detection work.
+
+Example command:
+
+```bash
+python -m rubiks_solver.image_sampler --image test_pictures/photo_1_white_green_orange.jpg --points test_pictures/sample_points_photo_1_template.json --output reports/photo_1_samples.json --annotated-output reports/photo_1_samples_annotated.jpg
+```
+
+Template point files live in:
+
+- `test_pictures/sample_points_photo_1_template.json`
+- `test_pictures/sample_points_photo_2_template.json`
+
 ## Project Structure
 
 ```text
@@ -242,6 +261,8 @@ rubiks_solver/
   color_state.py
   cli.py
   face_input.py
+  image_sampler.py
+  image_sampling.py
   robot_moves.py
   solver.py
   validation.py
@@ -249,6 +270,7 @@ tests/
   test_cli.py
   test_color_state.py
   test_face_input.py
+  test_image_sampling.py
   test_robot_moves.py
   test_solver.py
   test_validation.py
@@ -256,6 +278,8 @@ test_pictures/
   README.md
   photo_1_white_green_orange.jpg
   photo_2_yellow_blue_red.jpg
+  sample_points_photo_1_template.json
+  sample_points_photo_2_template.json
 requirements.txt
 README.md
 ```

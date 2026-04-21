@@ -15,6 +15,8 @@ The project still does not automatically read these images yet.
 Manual face input is now implemented for users who want to read these photos by hand.
 A capture guide CLI now exists to help users manually read the current sample photos.
 Automatic image processing is still not implemented.
+Image sampling debug now exists with manual coordinate JSON files.
+It is meant to help tune future color detection, not replace it.
 
 ## Current Confirmed Orientation
 
@@ -114,6 +116,7 @@ B0 B1 B2 B3 B4 B5 B6 B7 B8
 
 ## Future Image Pipeline
 
+- Use image sampling debug reports to inspect RGB and HSV values from real stickers.
 - Load two images.
 - Detect or manually select the 3 visible faces in each image.
 - Sample 9 stickers per face.

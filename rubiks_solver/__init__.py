@@ -8,6 +8,7 @@ from .face_input import (
     assemble_faces_to_color_string,
     assemble_faces_to_facelet_string,
 )
+from .image_sampling import ImageSamplingError, rgb_to_hsv_degrees, sample_image_points
 from .robot_moves import DEFAULT_FACE_COLOR_MAPPING, convert_solution_to_robot_commands
 from .solver import solve_cube
 from .validation import CubeValidationError, validate_cube_state
@@ -19,11 +20,14 @@ __all__ = [
     "DEFAULT_CAPTURE_PRESET",
     "FACE_ROTATION_PRESETS",
     "FaceInputError",
+    "ImageSamplingError",
     "assemble_faces_to_color_string",
     "assemble_faces_to_facelet_string",
     "build_capture_guide",
     "colors_to_facelet_string",
     "convert_solution_to_robot_commands",
+    "rgb_to_hsv_degrees",
+    "sample_image_points",
     "solve_cube",
     "validate_cube_state",
 ]
