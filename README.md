@@ -4,7 +4,8 @@ Python scaffold for solving a Rubik's Cube from either a manual 54-character cub
 string or a 54-sticker color-name state. Current version validates input, converts color
 input or manual per-face input into the internal Kociemba facelet format, solves the cube
 with the `kociemba` package, converts the solution into simple robot-friendly color and
-angle commands, includes static debug tools, and now adds a live camera face scanner.
+angle commands, includes static debug tools, adds a live camera face scanner, and now
+adds a Tkinter desktop app for the main user workflow.
 
 ## What This Project Does Right Now
 
@@ -13,6 +14,7 @@ angle commands, includes static debug tools, and now adds a live camera face sca
 - Accepts manual picture-assisted `--faces` input for one face at a time.
 - Samples RGB and HSV values from manual image coordinates for debugging.
 - Scans one face at a time from a live camera feed with a 3x3 overlay.
+- Launches a desktop GUI app for manual entry and camera review.
 - Validates basic input rules before solving.
 - Solves the cube with the `kociemba` Python package.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
@@ -54,6 +56,12 @@ Show CLI help:
 
 ```bash
 python -m rubiks_solver.cli --help
+```
+
+Launch the desktop app:
+
+```bash
+python -m rubiks_solver.gui_app
 ```
 
 Solve a cube from a 54-character facelet state string:
@@ -377,6 +385,26 @@ Session solver uses virtual centers for solving:
 The camera center color is ignored for solving.
 If counts are wrong, use the printed face rows and `--override` to correct stickers.
 
+## Desktop GUI App
+
+The main user workflow can now use a Tkinter desktop app:
+
+```bash
+python -m rubiks_solver.gui_app
+```
+
+GUI flow:
+
+- Home screen with `Manual` and `Camera Scan`
+- Shared face editor for both manual entry and scanned review
+- Fixed virtual centers in the editor
+- Camera scan review page pre-fills scanned colors and lets the user correct them manually
+- Result screen shows either solution output or clear error details
+
+Manual mode starts with virtual centers fixed and outer stickers set to unknown.
+Camera Scan mode runs the existing live scan session, then loads the scanned colors into the same editor screen.
+The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
+
 ## Project Structure
 
 ```text
@@ -388,6 +416,9 @@ rubiks_solver/
   color_state.py
   cli.py
   face_input.py
+  gui_app.py
+  gui_models.py
+  gui_solver.py
   image_sampler.py
   image_sampling.py
   live_face_scanner.py
@@ -400,6 +431,7 @@ tests/
   test_cli.py
   test_color_state.py
   test_face_input.py
+  test_gui_solver.py
   test_image_sampling.py
   test_live_face_scanner.py
   test_point_picker.py

@@ -23,6 +23,8 @@ Older point-picker and static sample tools remain useful for debugging and tunin
 Main MVP path is now live scan session plus session solver.
 Static two-picture and manual tools remain debug and reference tools.
 Session solver can use virtual centers because physical center pieces may be replaced later.
+The desktop GUI app now uses Manual mode and Camera Scan mode as the main user-facing workflow.
+Both GUI paths use the same review editor with virtual centers before solving.
 
 ## Current Confirmed Orientation
 
