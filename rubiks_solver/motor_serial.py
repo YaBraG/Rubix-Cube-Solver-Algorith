@@ -50,6 +50,10 @@ def format_ping_command() -> str:
     return "PING"
 
 
+def format_config_command() -> str:
+    return "CONFIG?"
+
+
 def format_move_command(motor_index: int, angle: int) -> str:
     validate_motor_index(motor_index)
     validate_angle(angle)
@@ -106,6 +110,14 @@ def ping_arduino(connection: Any) -> str:
     return response
 
 
+def request_arduino_config(connection: Any) -> str:
+    _write_command(connection, format_config_command())
+    response = _expect_ok(_read_response(connection))
+    if not response.startswith("OK CONFIG"):
+        raise MotorSerialError(f"Unexpected config response: {response}")
+    return response
+
+
 def send_move(connection: Any, motor_index: int, angle: int) -> list[str]:
     command = format_move_command(motor_index, angle)
     _write_command(connection, command)
@@ -147,6 +159,14 @@ def ping_arduino_port(port: str, *, timeout: float = SERIAL_TIMEOUT) -> str:
         connection.close()
 
 
+def request_config_on_port(port: str, *, timeout: float = SERIAL_TIMEOUT) -> str:
+    connection = open_serial_connection(port, timeout=timeout)
+    try:
+        return request_arduino_config(connection)
+    finally:
+        connection.close()
+
+
 def move_motor_on_port(port: str, motor_index: int, angle: int, *, timeout: float = SERIAL_TIMEOUT) -> list[str]:
     connection = open_serial_connection(port, timeout=timeout)
     try:
@@ -177,6 +197,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--list", action="store_true", help="List available serial ports.")
     parser.add_argument("--port", help="Serial port such as COM3.")
     parser.add_argument("--ping", action="store_true", help="Ping the Arduino on the selected port.")
+    parser.add_argument("--config", action="store_true", help="Read Arduino motor configuration.")
     parser.add_argument(
         "--move",
         nargs=2,
@@ -200,6 +221,12 @@ def main(argv: list[str] | None = None) -> int:
             if not args.port:
                 parser.error("--ping requires --port.")
             print(ping_arduino_port(args.port))
+            return 0
+
+        if args.config:
+            if not args.port:
+                parser.error("--config requires --port.")
+            print(request_config_on_port(args.port))
             return 0
 
         if args.move:

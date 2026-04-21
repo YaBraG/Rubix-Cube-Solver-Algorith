@@ -5,8 +5,10 @@ import pytest
 from rubiks_solver.motor_serial import (
     DEFAULT_COLOR_TO_MOTOR_MAP,
     MotorSerialError,
+    format_config_command,
     format_move_command,
     list_serial_ports,
+    request_arduino_config,
     resolve_color_motor,
     send_color_angle_commands,
     send_move,
@@ -34,6 +36,7 @@ class FakeSerial:
 def test_command_formatting():
     assert format_move_command(0, 90) == "MOVE 0 90"
     assert format_move_command(5, -180) == "MOVE 5 -180"
+    assert format_config_command() == "CONFIG?"
 
 
 def test_angle_validation():
@@ -76,6 +79,19 @@ def test_send_color_angle_command_list_uses_mapping():
 
     assert len(responses) == 2
     assert fake.writes == ["MOVE 0 90\n", "MOVE 1 -90\n"]
+
+
+def test_request_config_reads_ok_config_response():
+    fake = FakeSerial(
+        [
+            "OK CONFIG MOTOR_FULL_STEPS_PER_REV=400 MICROSTEPS=1 STEPS_PER_REV=400 STEPS_PER_90=100 STEP_DELAY_US=2000",
+        ]
+    )
+
+    response = request_arduino_config(fake)
+
+    assert response.startswith("OK CONFIG")
+    assert fake.writes == ["CONFIG?\n"]
 
 
 def test_list_ports_uses_serial_tools(monkeypatch):

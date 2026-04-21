@@ -424,20 +424,25 @@ The GUI result screen can refresh COM ports, ping Arduino, and send all solved c
 
 Arduino sketch lives at:
 
-- `arduino_code/motor_control/motor_control.ino`
+- `arduino_data/code/motor_control/motor_control.ino`
 
 Upload it to the Arduino that drives the six stepper channels.
 The sketch listens on serial at `115200` baud.
+The motor is a `0.9 degree` stepper, so it has `400` full steps per revolution.
+`MICROSTEPS` in the sketch must match the real A4988 jumper setting.
 
 Serial protocol:
 
 - `PING`
+- `CONFIG?`
 - `MOVE <motor_index> <angle>`
 - `STOP`
+- `SET_STEPS90 <value>`
 
 Example replies:
 
 - `OK PONG`
+- `OK CONFIG MOTOR_FULL_STEPS_PER_REV=400 MICROSTEPS=1 STEPS_PER_REV=400 STEPS_PER_90=100 STEP_DELAY_US=2000`
 - `OK MOVING 1 90 50`
 - `OK DONE`
 - `ERR invalid angle`
@@ -447,6 +452,7 @@ Python serial helper:
 ```bash
 python -m rubiks_solver.motor_serial --list
 python -m rubiks_solver.motor_serial --port COM3 --ping
+python -m rubiks_solver.motor_serial --port COM3 --config
 python -m rubiks_solver.motor_serial --port COM3 --move 0 90
 ```
 
@@ -461,9 +467,15 @@ Default color-to-motor map:
 
 Tuning notes:
 
+- A4988 microstep options are `1`, `2`, `4`, `8`, `16`
 - Arduino `STEP_DELAY_US` controls step speed
-- Arduino `STEPS_PER_90` controls how many steps equal one face turn
+- `SET_STEPS90 <value>` lets you tune 90-degree turns without reuploading
 - Arduino direction can be flipped per motor by changing the direction pin logic if hardware rotation is backwards
+- Motor wiring note: `BLK=A+`, `BLU=A-`, `GRN=B+`, `RED=B-`
+- The motor is about `1.5A per phase`, so A4988 current limit must be set physically
+- Use cooling or heatsinks if the driver runs hot
+- `RESET` and `SLEEP` must be held high if they are not controlled elsewhere
+- Arduino, driver, and motor supply need a common ground
 
 ## Project Structure
 
@@ -509,7 +521,8 @@ test_pictures/
   sample_points_photo_2_template.json
 requirements.txt
 README.md
-arduino_code/
-  motor_control/
-    motor_control.ino
+arduino_data/
+  code/
+    motor_control/
+      motor_control.ino
 ```
