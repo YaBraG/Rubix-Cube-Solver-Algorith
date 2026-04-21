@@ -333,6 +333,50 @@ In scan session mode, show one face, press `s`, let it save, then move to the ne
 It saves `u_face_scan.json`, `r_face_scan.json`, `f_face_scan.json`, `d_face_scan.json`, `l_face_scan.json`, `b_face_scan.json`, and `session_summary.json`.
 This still does not solve the full cube from camera yet.
 
+## Solve From Live Scan Session
+
+Main MVP path is now:
+
+1. Run a live scan session.
+2. Show each face and press `s`.
+3. Run the session solver on the saved session folder.
+
+Scan session:
+
+```bash
+python -m rubiks_solver.live_face_scanner --camera 1 --scan-session --grid-size 450 --patch-size 6 --output-dir captures/session_1 --force
+```
+
+Solve the saved session:
+
+```bash
+python -m rubiks_solver.session_solver --session-dir captures/session_1
+```
+
+Write a solve report:
+
+```bash
+python -m rubiks_solver.session_solver --session-dir captures/session_1 --output captures/session_1/solve_report.json
+```
+
+Apply a manual correction:
+
+```bash
+python -m rubiks_solver.session_solver --session-dir captures/session_1 --override U0=white
+```
+
+Session solver uses virtual centers for solving:
+
+- `U4 = white`
+- `R4 = red`
+- `F4 = green`
+- `D4 = yellow`
+- `L4 = orange`
+- `B4 = blue`
+
+The camera center color is ignored for solving.
+If counts are wrong, use the printed face rows and `--override` to correct stickers.
+
 ## Project Structure
 
 ```text
@@ -349,6 +393,7 @@ rubiks_solver/
   live_face_scanner.py
   point_picker.py
   robot_moves.py
+  session_solver.py
   solver.py
   validation.py
 tests/
@@ -359,6 +404,7 @@ tests/
   test_live_face_scanner.py
   test_point_picker.py
   test_robot_moves.py
+  test_session_solver.py
   test_solver.py
   test_validation.py
 test_pictures/

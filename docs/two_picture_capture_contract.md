@@ -20,6 +20,9 @@ It is meant to help tune future color detection, not replace it.
 Point picker now exists as the current bridge between sample photos and sampler reports.
 Live camera scanning is now being introduced as the main product path.
 Older point-picker and static sample tools remain useful for debugging and tuning.
+Main MVP path is now live scan session plus session solver.
+Static two-picture and manual tools remain debug and reference tools.
+Session solver can use virtual centers because physical center pieces may be replaced later.
 
 ## Current Confirmed Orientation
 
