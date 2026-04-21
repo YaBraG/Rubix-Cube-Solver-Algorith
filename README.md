@@ -12,19 +12,29 @@ the solution into simple robot-friendly color and angle commands.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
 - Prints robot-friendly commands such as `red, 90` and `white, -90`.
 
+Robot-friendly output currently means:
+
+- Colored face plus angle only.
+- No motor control yet.
+- `90` means clockwise.
+- `-90` means counter-clockwise.
+- `180` means half turn.
+- Clockwise and counter-clockwise are defined from the viewpoint of looking directly at that face.
+
 ## What This Project Does Not Do Yet
 
 - It does not do image capture or image processing yet.
 - It does not read two pictures of the cube yet.
 - It does not control a robot yet.
+- It does not convert face turns into hardware or motor commands yet.
 - It does not auto-detect the cube orientation yet.
 
 Image capture from 2 pictures with 3 visible faces per picture is planned for a later step.
+The motor-control layer will come later after the robot mechanism is known.
 
 ## Install
 
-1. Create and activate a Python virtual environment if you want one.
-2. Install dependencies:
+Install dependencies:
 
 ```bash
 pip install -r requirements.txt
@@ -95,16 +105,28 @@ Current editable default mapping in code:
 
 - `U = white`
 - `D = yellow`
-- `R = red`
-- `L = orange`
 - `F = green`
 - `B = blue`
+- `R = red`
+- `L = orange`
 
-Important note:
+Current confirmed orientation:
 
 - `white = Up` is confirmed.
 - `yellow = Down` is confirmed.
-- `red`, `orange`, `green`, and `blue` are temporary defaults for now and can be changed later to match the real robot and cube orientation.
+- `green = Front` is confirmed.
+
+Current default full mapping:
+
+- `U = white`
+- `D = yellow`
+- `F = green`
+- `B = blue`
+- `R = red`
+- `L = orange`
+
+Only white, yellow, and green are confirmed right now.
+Blue, red, and orange stay as easy-to-edit defaults until the real robot and cube orientation are finalized.
 
 ## Project Structure
 
@@ -117,6 +139,7 @@ rubiks_solver/
   validation.py
 tests/
   test_robot_moves.py
+  test_solver.py
   test_validation.py
 requirements.txt
 README.md
