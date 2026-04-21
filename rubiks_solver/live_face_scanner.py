@@ -13,6 +13,14 @@ from .image_sampling import rgb_to_hsv_degrees
 VALID_FACES = ("U", "R", "F", "D", "L", "B")
 
 
+def positive_int(value: str) -> int:
+    """Argparse helper for positive integers."""
+    parsed = int(value)
+    if parsed <= 0:
+        raise argparse.ArgumentTypeError("Value must be a positive integer.")
+    return parsed
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rubiks-live-scanner",
@@ -26,6 +34,20 @@ def build_parser() -> argparse.ArgumentParser:
         "--face",
         choices=VALID_FACES,
         help="Optional face label for this scan: U, R, F, D, L, or B.",
+    )
+    parser.add_argument(
+        "--grid-size",
+        type=positive_int,
+        help=(
+            "Full 3x3 overlay size in pixels. Larger values help cover a larger cube face."
+        ),
+    )
+    parser.add_argument(
+        "--patch-size",
+        type=positive_int,
+        help=(
+            "Square sampling patch size in pixels. Keep it small enough to avoid black borders."
+        ),
     )
     parser.add_argument(
         "--output",
@@ -160,6 +182,11 @@ def build_scan_payload(
     return payload
 
 
+def compute_default_grid_size(frame_width: int, frame_height: int) -> int:
+    """Compute a larger, more usable default overlay size."""
+    return max(180, round(min(frame_width, frame_height) * 0.42))
+
+
 def save_scan_payload(output_path: str | Path, payload: dict[str, Any]) -> Path:
     """Save sampled payload to JSON."""
     output_file = Path(output_path)
@@ -183,6 +210,8 @@ def get_help_summary_text() -> str:
             "  w/a/x/d or arrow keys = move grid",
             "  + / - = increase/decrease grid size",
             "  [ / ] = decrease/increase sample patch size",
+            "  --grid-size sets full overlay size in pixels",
+            "  --patch-size sets square sampling patch size in pixels",
             "  h = print this help",
         ]
     )
@@ -268,7 +297,14 @@ def draw_overlay(
     )
 
 
-def run_live_scanner(camera_index: int, face: str | None = None, output: str | None = None) -> int:
+def run_live_scanner(
+    camera_index: int,
+    face: str | None = None,
+    output: str | None = None,
+    *,
+    grid_size: int | None = None,
+    patch_size: int | None = None,
+) -> int:
     """Run the live scanner loop with OpenCV."""
     try:
         import cv2
@@ -290,8 +326,9 @@ def run_live_scanner(camera_index: int, face: str | None = None, output: str | N
     frame_height, frame_width = frame.shape[:2]
     center_x = frame_width // 2
     center_y = frame_height // 2
-    size = min(frame_width, frame_height) // 3
-    sample_patch_size = 12
+    size = grid_size or compute_default_grid_size(frame_width, frame_height)
+    size = min(size, min(frame_width, frame_height))
+    sample_patch_size = patch_size or 12
     last_payload = None
 
     print_help_summary()
@@ -387,7 +424,13 @@ def run_live_scanner(camera_index: int, face: str | None = None, output: str | N
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    return run_live_scanner(args.camera, face=args.face, output=args.output)
+    return run_live_scanner(
+        args.camera,
+        face=args.face,
+        output=args.output,
+        grid_size=args.grid_size,
+        patch_size=args.patch_size,
+    )
 
 
 if __name__ == "__main__":

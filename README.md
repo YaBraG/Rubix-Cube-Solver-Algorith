@@ -297,6 +297,13 @@ Controls:
 - `+/-` changes grid size
 - `[/]` changes sample patch size
 
+Options:
+
+- `--grid-size` sets the full 3x3 overlay size in pixels
+- `--patch-size` sets the square sampling patch size in pixels
+- A larger grid helps when the default overlay is too small for the visible cube face
+- Patch size should stay smaller than the sticker interior so it samples sticker color, not black borders
+
 Example commands:
 
 ```bash
@@ -305,6 +312,10 @@ python -m rubiks_solver.live_face_scanner --camera 0
 
 ```bash
 python -m rubiks_solver.live_face_scanner --camera 0 --face U --output captures/u_face_scan.json
+```
+
+```bash
+python -m rubiks_solver.live_face_scanner --camera 1 --grid-size 320 --patch-size 18
 ```
 
 ## Project Structure

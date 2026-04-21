@@ -4,9 +4,11 @@ from rubiks_solver.live_face_scanner import (
     build_parser,
     build_scan_payload,
     classify_hsv_color,
+    compute_default_grid_size,
     generate_grid_centers,
     get_help_summary_text,
     average_patch_rgb,
+    positive_int,
     save_scan_payload,
 )
 
@@ -104,3 +106,40 @@ def test_help_summary_text_matches_controls():
     assert "w/a/x/d or arrow keys = move grid" in text
     assert "s = sample current face" in text
     assert "WASD" not in text
+
+
+def test_cli_parses_grid_size_and_patch_size():
+    parser = build_parser()
+
+    args = parser.parse_args(["--camera", "1", "--grid-size", "320", "--patch-size", "18"])
+
+    assert args.camera == 1
+    assert args.grid_size == 320
+    assert args.patch_size == 18
+
+
+def test_non_positive_grid_size_rejected():
+    parser = build_parser()
+    try:
+        parser.parse_args(["--camera", "0", "--grid-size", "0"])
+        assert False, "parse_args should fail for non-positive grid size"
+    except SystemExit as exc:
+        assert exc.code == 2
+
+
+def test_non_positive_patch_size_rejected():
+    parser = build_parser()
+    try:
+        parser.parse_args(["--camera", "0", "--patch-size", "-4"])
+        assert False, "parse_args should fail for non-positive patch size"
+    except SystemExit as exc:
+        assert exc.code == 2
+
+
+def test_compute_default_grid_size_is_larger():
+    assert compute_default_grid_size(1920, 1080) == 454
+    assert compute_default_grid_size(640, 480) == 202
+
+
+def test_positive_int_helper():
+    assert positive_int("12") == 12
