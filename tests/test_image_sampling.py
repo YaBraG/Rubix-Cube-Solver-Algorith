@@ -125,6 +125,45 @@ def test_json_report_contains_expected_fields(tmp_path):
     assert saved["sample_count"] == 1
 
 
+def test_image_sampler_preserves_face_and_sticker_color(tmp_path):
+    image_path = tmp_path / "test.png"
+    points_path = tmp_path / "points.json"
+    create_test_image(image_path)
+    create_points_file(
+        points_path,
+        [
+            {
+                "label": "U0",
+                "face": "U",
+                "index": 0,
+                "face_color": "white",
+                "sticker_color": "red",
+                "x": 1,
+                "y": 1,
+            }
+        ],
+    )
+
+    report = sample_image_points(image_path, points_path)
+
+    assert report["samples"][0]["face_color"] == "white"
+    assert report["samples"][0]["sticker_color"] == "red"
+
+
+def test_image_sampler_preserves_expected_color_for_backward_compatibility(tmp_path):
+    image_path = tmp_path / "test.png"
+    points_path = tmp_path / "points.json"
+    create_test_image(image_path)
+    create_points_file(
+        points_path,
+        [{"label": "U0", "expected_color": "white", "x": 1, "y": 1}],
+    )
+
+    report = sample_image_points(image_path, points_path)
+
+    assert report["samples"][0]["expected_color"] == "white"
+
+
 def test_annotated_output_file_is_created(tmp_path):
     image_path = tmp_path / "test.png"
     points_path = tmp_path / "points.json"

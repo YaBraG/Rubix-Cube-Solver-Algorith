@@ -29,7 +29,8 @@ python -m rubiks_solver.point_picker --image test_pictures/photo_1_white_green_o
 python -m rubiks_solver.point_picker --image test_pictures/photo_2_yellow_blue_red.jpg --image-role photo_2 --output test_pictures/sample_points_photo_2.json
 ```
 
-Then run image sampler to inspect RGB and HSV values from those saved points.
+Generated real point files should include manually selected `sticker_color`.
+Then image sampler can inspect RGB and HSV values and later compare them against `sticker_color`.
 The sampler can write a JSON report and an optional annotated image:
 
 ```bash

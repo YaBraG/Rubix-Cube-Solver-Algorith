@@ -83,6 +83,12 @@ def validate_point(point: dict[str, Any], image_width: int, image_height: int) -
             raise ImageSamplingError(f"Point {label} has invalid index: {index}.")
         validated["index"] = index
 
+    if "face_color" in point:
+        validated["face_color"] = point["face_color"]
+
+    if "sticker_color" in point:
+        validated["sticker_color"] = point["sticker_color"]
+
     if "expected_color" in point:
         validated["expected_color"] = point["expected_color"]
 

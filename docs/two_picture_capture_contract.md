@@ -115,6 +115,12 @@ L0 L1 L2 L3 L4 L5 L6 L7 L8
 B0 B1 B2 B3 B4 B5 B6 B7 B8
 ```
 
+Important note:
+
+- Face labels identify which cube face a sticker belongs to.
+- Sticker colors are separate and may differ because the cube is scrambled.
+- Point picker now records both `face_color` and `sticker_color`.
+
 ## Future Image Pipeline
 
 - Use point picker to create real sample-point JSON files from the two sample photos.

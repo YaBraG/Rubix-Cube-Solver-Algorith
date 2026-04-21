@@ -12,6 +12,15 @@ from PIL import Image
 from .capture_guide import DEFAULT_CAPTURE_PRESET
 
 
+VALID_STICKER_COLORS = ("white", "yellow", "green", "blue", "red", "orange")
+COLOR_SHORTCUTS = {
+    "w": "white",
+    "y": "yellow",
+    "g": "green",
+    "b": "blue",
+    "r": "red",
+    "o": "orange",
+}
 POINT_PLANS = {
     "photo_1": [("U", "white"), ("F", "green"), ("L", "orange")],
     "photo_2": [("D", "yellow"), ("B", "blue"), ("R", "red")],
@@ -28,20 +37,33 @@ def build_point_plan(image_role: str) -> list[dict[str, Any]]:
         raise PointPickerError(f"Unsupported image role: {image_role}.")
 
     plan = []
-    for face, expected_color in POINT_PLANS[image_role]:
+    for face, face_color in POINT_PLANS[image_role]:
         for index in range(9):
             plan.append(
                 {
                     "label": f"{face}{index}",
                     "face": face,
                     "index": index,
-                    "expected_color": expected_color,
+                    "face_color": face_color,
                 }
             )
     return plan
 
 
-def build_point_payload(image_role: str, clicked_points: list[dict[str, int]]) -> dict[str, Any]:
+def validate_sticker_color(sticker_color: str) -> str:
+    """Validate and normalize one user-selected sticker color."""
+    normalized = sticker_color.strip().lower()
+    if normalized not in VALID_STICKER_COLORS:
+        raise PointPickerError(
+            f"Invalid sticker color: {sticker_color}. "
+            f"Use one of: {', '.join(VALID_STICKER_COLORS)}."
+        )
+    return normalized
+
+
+def build_point_payload(
+    image_role: str, clicked_points: list[dict[str, Any]]
+) -> dict[str, Any]:
     """Build sampler-compatible JSON payload from clicked coordinates."""
     plan = build_point_plan(image_role)
     if len(clicked_points) != len(plan):
@@ -51,9 +73,14 @@ def build_point_payload(image_role: str, clicked_points: list[dict[str, int]]) -
 
     points = []
     for planned, clicked in zip(plan, clicked_points):
+        if "sticker_color" not in clicked:
+            raise PointPickerError(
+                f"Clicked point for {planned['label']} is missing sticker_color."
+            )
         points.append(
             {
                 **planned,
+                "sticker_color": validate_sticker_color(clicked["sticker_color"]),
                 "x": clicked["x"],
                 "y": clicked["y"],
             }
@@ -81,7 +108,7 @@ def ensure_output_path(output_path: str | Path, force: bool = False) -> Path:
 def write_point_file(
     output_path: str | Path,
     image_role: str,
-    clicked_points: list[dict[str, int]],
+    clicked_points: list[dict[str, Any]],
     *,
     force: bool = False,
 ) -> Path:
@@ -153,12 +180,15 @@ def run_point_picker(
     }
 
     status_var = tk.StringVar()
+    selected_color_var = tk.StringVar(value="")
 
     def update_status() -> None:
         if len(state["points"]) < len(plan):
             current = plan[len(state["points"])]
+            selected = selected_color_var.get() or "none selected"
             status_var.set(
-                f"Click {current['label']} ({len(state['points']) + 1}/{len(plan)})"
+                f"Click {current['label']} ({len(state['points']) + 1}/{len(plan)}). "
+                f"Face color: {current['face_color']}. Sticker color: {selected}."
             )
         else:
             status_var.set("All points captured. Saving...")
@@ -169,12 +199,14 @@ def run_point_picker(
             display_x = item["display_x"]
             display_y = item["display_y"]
             label = item["label"]
+            marker_color = item["sticker_color"]
             canvas.create_oval(
                 display_x - 6,
                 display_y - 6,
                 display_x + 6,
                 display_y + 6,
-                outline="red",
+                outline="black",
+                fill=marker_color,
                 width=2,
                 tags="marker",
             )
@@ -188,13 +220,23 @@ def run_point_picker(
             )
 
     def finish() -> None:
-        payload_points = [{"x": item["x"], "y": item["y"]} for item in state["points"]]
+        payload_points = [
+            {
+                "x": item["x"],
+                "y": item["y"],
+                "sticker_color": item["sticker_color"],
+            }
+            for item in state["points"]
+        ]
         write_point_file(output_file, image_role, payload_points, force=True)
         messagebox.showinfo("Point Picker", f"Saved {len(payload_points)} points to {output_file}")
         root.destroy()
 
     def handle_click(event: tk.Event) -> None:
         if len(state["points"]) >= len(plan):
+            return
+        if not selected_color_var.get():
+            status_var.set("Select a sticker color first, then click the sticker center.")
             return
         planned = plan[len(state["points"])]
         original_x = max(0, min(image_width - 1, round(event.x / scale)))
@@ -206,6 +248,7 @@ def run_point_picker(
                 "y": original_y,
                 "display_x": event.x,
                 "display_y": event.y,
+                "sticker_color": selected_color_var.get(),
             }
         )
         redraw()
@@ -227,9 +270,22 @@ def run_point_picker(
     top_frame = tk.Frame(root)
     top_frame.pack(fill="x", padx=8, pady=8)
 
-    tk.Label(top_frame, textvariable=status_var, anchor="w").pack(side="left")
+    tk.Label(top_frame, textvariable=status_var, anchor="w", justify="left").pack(side="left")
     tk.Button(top_frame, text="Undo", command=undo_last).pack(side="right", padx=4)
     tk.Button(top_frame, text="Cancel", command=cancel).pack(side="right")
+
+    color_frame = tk.Frame(root)
+    color_frame.pack(fill="x", padx=8)
+    tk.Label(color_frame, text="Sticker color:").pack(side="left")
+
+    for color_name in VALID_STICKER_COLORS:
+        tk.Radiobutton(
+            color_frame,
+            text=color_name,
+            value=color_name,
+            variable=selected_color_var,
+            command=update_status,
+        ).pack(side="left")
 
     canvas = tk.Canvas(root, width=display_size[0], height=display_size[1], cursor="crosshair")
     canvas.pack(padx=8, pady=8)
@@ -237,6 +293,21 @@ def run_point_picker(
     canvas.bind("<Button-1>", handle_click)
     root.bind("<BackSpace>", undo_last)
     root.bind("<Escape>", lambda _event: cancel())
+    for shortcut, color_name in COLOR_SHORTCUTS.items():
+        root.bind(
+            shortcut,
+            lambda _event, color_name=color_name: (
+                selected_color_var.set(color_name),
+                update_status(),
+            ),
+        )
+        root.bind(
+            shortcut.upper(),
+            lambda _event, color_name=color_name: (
+                selected_color_var.set(color_name),
+                update_status(),
+            ),
+        )
 
     update_status()
     root.mainloop()

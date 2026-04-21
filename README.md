@@ -242,6 +242,12 @@ This helps inspect lighting, color separation, and red/orange differences before
 User-assisted point picker lives in `python -m rubiks_solver.point_picker`.
 It opens an image, lets you click sticker centers, and saves a real sample-points JSON file.
 This is still user-assisted, not automatic detection.
+The picker now records both:
+
+- `face_color`: the home color of the face being labeled
+- `sticker_color`: the actual sticker color chosen by the user while clicking
+
+This gives ground-truth labels for future color classification work.
 
 Photo 1 picker:
 
