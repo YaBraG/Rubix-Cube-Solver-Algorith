@@ -78,10 +78,23 @@ Solve a cube from six manually read faces using current picture preset:
 python -m rubiks_solver.cli --faces --u "y y g y w b r y w" --f "b g w g g w y r r" --l "o w r g o b b r o" --d "r b b w y w g y w" --b "y o o b b o y o o" --r "g r b o r g w r g"
 ```
 
+Print the manual capture guide:
+
+```bash
+python -m rubiks_solver.cli --capture-guide
+```
+
+Print the manual capture guide with optional sample photo paths:
+
+```bash
+python -m rubiks_solver.cli --capture-guide --photo1 test_pictures/photo_1_white_green_orange.jpg --photo2 test_pictures/photo_2_yellow_blue_red.jpg
+```
+
 If the string is invalid, the CLI prints a simple error.
 If the string describes an impossible cube, the CLI prints a simple error.
 If both facelet input and `--colors` are provided, the CLI prints a simple error.
 Full color names still work for compatibility.
+`--capture-guide` only prints manual instructions. It does not process, open, or detect anything from images.
 
 ## Input Formats
 
@@ -216,6 +229,7 @@ Sample test pictures can be stored in [test_pictures/](test_pictures/).
 Current real sample set uses `photo_1_white_green_orange.jpg` and `photo_2_yellow_blue_red.jpg`.
 The project still does not process images automatically yet.
 Folder notes live in [test_pictures/README.md](test_pictures/README.md).
+Manual capture instructions are available from `python -m rubiks_solver.cli --capture-guide`.
 
 ## Project Structure
 
@@ -224,6 +238,7 @@ docs/
   two_picture_capture_contract.md
 rubiks_solver/
   __init__.py
+  capture_guide.py
   color_state.py
   cli.py
   face_input.py

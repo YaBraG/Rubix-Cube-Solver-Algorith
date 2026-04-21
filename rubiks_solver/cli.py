@@ -3,6 +3,7 @@
 import argparse
 import sys
 
+from .capture_guide import build_capture_guide
 from .color_state import ColorStateError, colors_to_facelet_string
 from .face_input import FACE_ORDER, FaceInputError, assemble_faces_to_facelet_string
 from .robot_moves import (
@@ -17,9 +18,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rubiks-solver",
         description=(
-            "Solve a Rubik's Cube from either a 54-character Kociemba facelet "
-            "string or 54 color tokens, then print both standard moves and "
-            "robot-friendly commands."
+            "Solve a Rubik's Cube from facelets, color tokens, or manual per-face "
+            "input, and print standard moves plus robot-friendly commands."
         ),
     )
     parser.add_argument(
@@ -34,6 +34,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--faces",
         action="store_true",
         help="Read six faces separately for manual picture-assisted input.",
+    )
+    parser.add_argument(
+        "--capture-guide",
+        action="store_true",
+        help="Print manual instructions for reading the current two-photo setup.",
     )
     parser.add_argument(
         "--colors",
@@ -54,6 +59,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="capture-v1",
         choices=["capture-v1"],
         help="Face orientation preset for --faces mode. Default: capture-v1.",
+    )
+    parser.add_argument(
+        "--photo1",
+        help="Optional path to first sample photo for capture-guide output.",
+    )
+    parser.add_argument(
+        "--photo2",
+        help="Optional path to second sample photo for capture-guide output.",
     )
     return parser
 
@@ -98,11 +111,30 @@ def resolve_cube_state_input(
     return args.cube_state
 
 
+def print_capture_guide(
+    args: argparse.Namespace,
+    parser: argparse.ArgumentParser,
+) -> int:
+    face_values = {face: getattr(args, face.lower()) for face in FACE_ORDER}
+    provided_face_args = [face for face, value in face_values.items() if value]
+
+    if args.cube_state or args.colors or args.faces or provided_face_args:
+        parser.error(
+            "--capture-guide is only for instructions and cannot be combined with solve input."
+        )
+
+    print(build_capture_guide(photo1=args.photo1, photo2=args.photo2))
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
 
     try:
+        if args.capture_guide:
+            return print_capture_guide(args, parser)
+
         cube_state = resolve_cube_state_input(args, parser)
         if not cube_state:
             parser.print_help()

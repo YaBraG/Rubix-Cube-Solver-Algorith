@@ -13,6 +13,8 @@ Real sample photos now live under `test_pictures/`.
 They are reference assets for manual inspection and future image-processing development.
 The project still does not automatically read these images yet.
 Manual face input is now implemented for users who want to read these photos by hand.
+A capture guide CLI now exists to help users manually read the current sample photos.
+Automatic image processing is still not implemented.
 
 ## Current Confirmed Orientation
 

@@ -6,6 +6,12 @@ The current program does not process these pictures yet.
 These images are reference assets for the future two-picture workflow only.
 Users can manually read these pictures and test the solver with `--faces`.
 The program still does not detect sticker colors automatically.
+Capture instructions are available with `python -m rubiks_solver.cli --capture-guide`.
+
+Current sample picture paths:
+
+- `test_pictures/photo_1_white_green_orange.jpg`
+- `test_pictures/photo_2_yellow_blue_red.jpg`
 
 Current capture idea:
 
