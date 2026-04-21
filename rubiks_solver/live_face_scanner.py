@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 from pathlib import Path
 from typing import Any
@@ -297,6 +298,40 @@ def draw_overlay(
     )
 
 
+def prepare_preview_frame(
+    cv2: Any,
+    raw_frame: Any,
+    *,
+    center_x: int,
+    center_y: int,
+    size: int,
+    sample_patch_size: int,
+    face: str | None = None,
+) -> tuple[Any, list[dict[str, Any]]]:
+    """Sample from raw frame and draw overlay only on a display copy."""
+    # Sampling must use the raw frame. Overlay drawing happens on a copy so
+    # grid lines, circles, and text do not affect color readings.
+    preview_samples = sample_face(
+        raw_frame,
+        center_x=center_x,
+        center_y=center_y,
+        size=size,
+        sample_patch_size=sample_patch_size,
+    )
+    display_frame = raw_frame.copy() if hasattr(raw_frame, "shape") else copy.deepcopy(raw_frame)
+    draw_overlay(
+        cv2,
+        display_frame,
+        center_x=center_x,
+        center_y=center_y,
+        size=size,
+        sample_patch_size=sample_patch_size,
+        preview_samples=preview_samples,
+        face=face,
+    )
+    return display_frame, preview_samples
+
+
 def run_live_scanner(
     camera_index: int,
     face: str | None = None,
@@ -335,29 +370,21 @@ def run_live_scanner(
 
     try:
         while True:
-            ok, frame = capture.read()
+            ok, raw_frame = capture.read()
             if not ok:
                 print("Warning: Failed to read frame from camera.")
                 break
 
-            preview_samples = sample_face(
-                frame,
-                center_x=center_x,
-                center_y=center_y,
-                size=size,
-                sample_patch_size=sample_patch_size,
-            )
-            draw_overlay(
+            display_frame, preview_samples = prepare_preview_frame(
                 cv2,
-                frame,
+                raw_frame,
                 center_x=center_x,
                 center_y=center_y,
                 size=size,
                 sample_patch_size=sample_patch_size,
-                preview_samples=preview_samples,
                 face=face,
             )
-            cv2.imshow("Rubik's Live Face Scanner", frame)
+            cv2.imshow("Rubik's Live Face Scanner", display_frame)
 
             key = cv2.waitKey(1) & 0xFF
             if key == 255:
@@ -367,13 +394,6 @@ def run_live_scanner(
             if key == ord("h"):
                 print_help_summary()
             elif key == ord("s"):
-                samples = sample_face(
-                    frame,
-                    center_x=center_x,
-                    center_y=center_y,
-                    size=size,
-                    sample_patch_size=sample_patch_size,
-                )
                 last_payload = build_scan_payload(
                     camera_index=camera_index,
                     face=face,
@@ -381,10 +401,10 @@ def run_live_scanner(
                     center_y=center_y,
                     size=size,
                     sample_patch_size=sample_patch_size,
-                    samples=samples,
+                    samples=preview_samples,
                 )
                 print("Sampled face:")
-                for sample in samples:
+                for sample in preview_samples:
                     print(
                         f"  {sample['index']}: {sample['classified_color']} "
                         f"RGB={sample['rgb']} HSV={sample['hsv']}"

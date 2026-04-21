@@ -8,6 +8,7 @@ from rubiks_solver.live_face_scanner import (
     generate_grid_centers,
     get_help_summary_text,
     average_patch_rgb,
+    prepare_preview_frame,
     positive_int,
     save_scan_payload,
 )
@@ -143,3 +144,48 @@ def test_compute_default_grid_size_is_larger():
 
 def test_positive_int_helper():
     assert positive_int("12") == 12
+
+
+def test_prepare_preview_frame_samples_raw_frame_only():
+    raw_frame = [
+        [[0, 0, 0], [0, 0, 255], [0, 0, 0]],
+        [[0, 0, 255], [0, 0, 255], [0, 0, 255]],
+        [[0, 0, 0], [0, 0, 255], [0, 0, 0]],
+    ]
+
+    class FakeCv2:
+        def __init__(self):
+            self.draw_calls = 0
+
+        def rectangle(self, frame, *_args, **_kwargs):
+            self.draw_calls += 1
+            frame[1][1] = [255, 255, 255]
+
+        def line(self, *_args, **_kwargs):
+            return None
+
+        def circle(self, frame, center, *_args, **_kwargs):
+            self.draw_calls += 1
+            x, y = center
+            frame[y][x] = [255, 255, 255]
+
+        def putText(self, *_args, **_kwargs):
+            return None
+
+        FONT_HERSHEY_SIMPLEX = 0
+        LINE_AA = 0
+
+    fake_cv2 = FakeCv2()
+    display_frame, preview_samples = prepare_preview_frame(
+        fake_cv2,
+        raw_frame,
+        center_x=1,
+        center_y=1,
+        size=3,
+        sample_patch_size=1,
+        face="U",
+    )
+
+    assert preview_samples[4]["rgb"] == {"r": 255, "g": 0, "b": 0}
+    assert display_frame[1][1] == [255, 255, 255]
+    assert raw_frame[1][1] == [0, 0, 255]

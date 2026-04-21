@@ -288,6 +288,7 @@ The scanner samples the 8 surrounding stickers plus the center sticker.
 The center sticker is especially important because it identifies the face color.
 The color classifier is experimental and easy to tune later.
 It does not solve the full cube from camera yet.
+The scanner samples from the raw camera frame and draws overlays only on a display copy so the overlay does not affect color readings.
 
 Controls:
 
