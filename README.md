@@ -8,7 +8,7 @@ package, and converts the solution into simple robot-friendly color and angle co
 ## What This Project Does Right Now
 
 - Accepts a cube state string in standard Kociemba facelet order.
-- Accepts a 54-sticker color-name input string and converts it into facelets.
+- Accepts a 54-sticker color input string with fast one-letter tokens or full color names and converts it into facelets.
 - Validates basic input rules before solving.
 - Solves the cube with the `kociemba` Python package.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
@@ -57,7 +57,13 @@ Solve a cube from a 54-character facelet state string:
 python -m rubiks_solver.cli UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB
 ```
 
-Solve a cube from 54 color names:
+Solve a cube from 54 shorthand color tokens:
+
+```bash
+python -m rubiks_solver.cli --colors "w w w w w w w w w r r r r r r r r r g g g g g g g g g y y y y y y y y y o o o o o o o o o b b b b b b b b b"
+```
+
+Solve a cube from 54 full color names:
 
 ```bash
 python -m rubiks_solver.cli --colors "white white white white white white white white white red red red red red red red red red green green green green green green green green green yellow yellow yellow yellow yellow yellow yellow yellow yellow orange orange orange orange orange orange orange orange orange blue blue blue blue blue blue blue blue blue"
@@ -66,6 +72,7 @@ python -m rubiks_solver.cli --colors "white white white white white white white 
 If the string is invalid, the CLI prints a simple error.
 If the string describes an impossible cube, the CLI prints a simple error.
 If both facelet input and `--colors` are provided, the CLI prints a simple error.
+Full color names still work for compatibility.
 
 ## Input Formats
 
@@ -92,9 +99,9 @@ The string must:
 - Use only the letters `U`, `R`, `F`, `D`, `L`, and `B`.
 - Contain each face letter exactly 9 times.
 
-### Color-Name Input
+### Color Input
 
-Color-name input uses the same sticker order as Kociemba facelets:
+Color input uses the same sticker order as Kociemba facelets:
 
 - First 9 stickers = Up face
 - Next 9 stickers = Right face
@@ -103,21 +110,22 @@ Color-name input uses the same sticker order as Kociemba facelets:
 - Next 9 stickers = Left face
 - Last 9 stickers = Back face
 
-Accepted color names:
+Accepted color tokens:
 
-- `white`
-- `yellow`
-- `green`
-- `blue`
-- `red`
-- `orange`
+- `white` or `w`
+- `yellow` or `y`
+- `green` or `g`
+- `blue` or `b`
+- `red` or `r`
+- `orange` or `o`
 
 Color input rules:
 
-- Must contain exactly 54 color names.
-- Colors are separated by spaces.
+- Must contain exactly 54 color tokens.
+- Tokens are separated by spaces.
 - Input is case-insensitive.
 - Each accepted color must appear exactly 9 times.
+- One-letter shorthand is the main fast input format.
 
 ## Example Output
 
@@ -167,9 +175,16 @@ Current default full mapping:
 Only white, yellow, and green are confirmed right now.
 Blue, red, and orange stay as easy-to-edit defaults until the real robot and cube orientation are finalized.
 
+## Future Capture Contract
+
+Two-picture design contract lives in [docs/two_picture_capture_contract.md](docs/two_picture_capture_contract.md).
+It describes the first proposed photo workflow for future image detection.
+
 ## Project Structure
 
 ```text
+docs/
+  two_picture_capture_contract.md
 rubiks_solver/
   __init__.py
   color_state.py

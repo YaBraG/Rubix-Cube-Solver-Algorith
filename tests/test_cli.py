@@ -12,6 +12,15 @@ SOLVED_COLOR_STATE = (
     "blue blue blue blue blue blue blue blue blue"
 )
 
+SOLVED_SHORTHAND_COLOR_STATE = (
+    "w w w w w w w w w "
+    "r r r r r r r r r "
+    "g g g g g g g g g "
+    "y y y y y y y y y "
+    "o o o o o o o o o "
+    "b b b b b b b b b"
+)
+
 SOLVED_FACELET_STATE = "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"
 
 
@@ -26,6 +35,15 @@ def test_cli_rejects_both_facelet_and_color_input(capsys):
 
 def test_cli_solves_solved_cube_with_color_input(capsys):
     exit_code = main(["--colors", SOLVED_COLOR_STATE])
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Cube already solved." in captured.out
+    assert "No robot moves needed." in captured.out
+
+
+def test_cli_solves_solved_cube_with_shorthand_color_input(capsys):
+    exit_code = main(["--colors", SOLVED_SHORTHAND_COLOR_STATE])
 
     assert exit_code == 0
     captured = capsys.readouterr()

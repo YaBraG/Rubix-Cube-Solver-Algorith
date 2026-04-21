@@ -17,7 +17,7 @@ def build_parser() -> argparse.ArgumentParser:
         prog="rubiks-solver",
         description=(
             "Solve a Rubik's Cube from either a 54-character Kociemba facelet "
-            "string or 54 color names, then print both standard moves and "
+            "string or 54 color tokens, then print both standard moves and "
             "robot-friendly commands."
         ),
     )
@@ -32,8 +32,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--colors",
         help=(
-            "54 space-separated sticker colors in Kociemba face order "
-            "(Up, Right, Front, Down, Left, Back)."
+            "54 space-separated sticker color tokens in Kociemba face order "
+            "(Up, Right, Front, Down, Left, Back). Use white/w, yellow/y, "
+            "green/g, blue/b, red/r, orange/o."
         ),
     )
     return parser
