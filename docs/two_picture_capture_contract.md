@@ -7,6 +7,11 @@ detected colors into the correct 54-sticker cube order.
 
 This is a design contract only.
 No image processing is implemented yet.
+This two-photo plan is provisional and may change after more testing.
+
+Real sample photos now live under `test_pictures/`.
+They are reference assets for manual inspection and future image-processing development.
+The project still does not automatically read these images yet.
 
 ## Current Confirmed Orientation
 
@@ -28,27 +33,38 @@ No image processing is implemented yet.
 This is the first proposed capture contract.
 It may be revised after testing with real pictures.
 
+Current real sample photos show orange in Photo 1 and red in Photo 2.
+Because of that, the current contract is now based on:
+
+- Photo 1: `U / F / L`
+- Photo 2: `D / B / R`
+
+| Photo | Visible faces | Purpose |
+|---|---|---|
+| Photo 1 | U / F / L | Captures white, green, orange |
+| Photo 2 | D / B / R | Captures yellow, blue, red |
+
 ### Photo 1
 
 - Cube held with white face on top.
 - Green face looking toward the camera/front.
 - Visible faces:
-- Up / white
-- Front / green
-- Right / red
+  - Up / white
+  - Front / green
+  - Left / orange
 
 ### Photo 2
 
 - Cube rotated so yellow face is visible.
 - Keep the same cube orientation logic as much as possible.
 - Visible faces should complete the missing faces:
-- Down / yellow
-- Back / blue
-- Left / orange
+  - Down / yellow
+  - Back / blue
+  - Right / red
 
 Important challenge:
 
-- Hardest part is preserving face orientation and sticker ordering between photos.
+- Preserving face orientation and sticker ordering between photos is still the hard part.
 
 ## Sticker Indexing Inside Each Face
 

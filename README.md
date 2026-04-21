@@ -179,6 +179,10 @@ Blue, red, and orange stay as easy-to-edit defaults until the real robot and cub
 
 Two-picture design contract lives in [docs/two_picture_capture_contract.md](docs/two_picture_capture_contract.md).
 It describes the first proposed photo workflow for future image detection.
+Sample test pictures can be stored in [test_pictures/](test_pictures/).
+Current real sample set uses `photo_1_white_green_orange.jpg` and `photo_2_yellow_blue_red.jpg`.
+The project still does not process images automatically yet.
+Folder notes live in [test_pictures/README.md](test_pictures/README.md).
 
 ## Project Structure
 
@@ -198,6 +202,10 @@ tests/
   test_robot_moves.py
   test_solver.py
   test_validation.py
+test_pictures/
+  README.md
+  photo_1_white_green_orange.jpg
+  photo_2_yellow_blue_red.jpg
 requirements.txt
 README.md
 ```
