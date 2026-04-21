@@ -4,6 +4,7 @@ import argparse
 import sys
 
 from .color_state import ColorStateError, colors_to_facelet_string
+from .face_input import FACE_ORDER, FaceInputError, assemble_faces_to_facelet_string
 from .robot_moves import (
     DEFAULT_FACE_COLOR_MAPPING,
     convert_solution_to_robot_commands,
@@ -30,12 +31,29 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument(
+        "--faces",
+        action="store_true",
+        help="Read six faces separately for manual picture-assisted input.",
+    )
+    parser.add_argument(
         "--colors",
         help=(
             "54 space-separated sticker color tokens in Kociemba face order "
             "(Up, Right, Front, Down, Left, Back). Use white/w, yellow/y, "
             "green/g, blue/b, red/r, orange/o."
         ),
+    )
+    for face in FACE_ORDER:
+        parser.add_argument(
+            f"--{face.lower()}",
+            dest=face.lower(),
+            help=f"9 space-separated color tokens for {face} face input.",
+        )
+    parser.add_argument(
+        "--face-orientation",
+        default="capture-v1",
+        choices=["capture-v1"],
+        help="Face orientation preset for --faces mode. Default: capture-v1.",
     )
     return parser
 
@@ -48,17 +66,35 @@ def format_robot_commands(commands: list[tuple[str, int]]) -> str:
 
 
 def resolve_cube_state_input(
-    cube_state: str | None,
-    colors: str | None,
+    args: argparse.Namespace,
     parser: argparse.ArgumentParser,
 ) -> str | None:
-    if cube_state and colors:
+    face_values = {face: getattr(args, face.lower()) for face in FACE_ORDER}
+    provided_face_args = [face for face, value in face_values.items() if value]
+
+    if args.faces and args.cube_state:
+        parser.error("Provide either a facelet cube state or --faces, not both.")
+    if args.faces and args.colors:
+        parser.error("Provide either --colors or --faces, not both.")
+    if args.cube_state and args.colors:
         parser.error("Provide either a facelet cube state or --colors, not both.")
+    if provided_face_args and not args.faces:
+        parser.error("Face arguments require --faces.")
 
-    if colors:
-        return colors_to_facelet_string(colors)
+    if args.faces:
+        missing_faces = [face for face in FACE_ORDER if not face_values[face]]
+        if missing_faces:
+            joined = ", ".join(f"--{face.lower()}" for face in missing_faces)
+            parser.error(f"--faces requires all six face arguments. Missing: {joined}.")
+        return assemble_faces_to_facelet_string(
+            {face: face_values[face] for face in FACE_ORDER},
+            orientation_preset=args.face_orientation,
+        )
 
-    return cube_state
+    if args.colors:
+        return colors_to_facelet_string(args.colors)
+
+    return args.cube_state
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -66,7 +102,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     try:
-        cube_state = resolve_cube_state_input(args.cube_state, args.colors, parser)
+        cube_state = resolve_cube_state_input(args, parser)
         if not cube_state:
             parser.print_help()
             return 1
@@ -77,6 +113,9 @@ def main(argv: list[str] | None = None) -> int:
             DEFAULT_FACE_COLOR_MAPPING,
         )
     except ColorStateError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
+    except FaceInputError as exc:
         print(f"Error: {exc}", file=sys.stderr)
         return 2
     except CubeValidationError as exc:

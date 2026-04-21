@@ -22,6 +22,20 @@ SOLVED_SHORTHAND_COLOR_STATE = (
 )
 
 SOLVED_FACELET_STATE = "UUUUUUUUURRRRRRRRRFFFFFFFFFDDDDDDDDDLLLLLLLLLBBBBBBBBB"
+SOLVED_U_FACE = "w w w w w w w w w"
+SOLVED_R_FACE = "r r r r r r r r r"
+SOLVED_F_FACE = "g g g g g g g g g"
+SOLVED_D_FACE = "y y y y y y y y y"
+SOLVED_L_FACE = "o o o o o o o o o"
+SOLVED_B_FACE = "b b b b b b b b b"
+RAW_SAMPLE_FACES = {
+    "u": "y y g y w b r y w",
+    "f": "b g w g g w y r r",
+    "l": "o w r g o b b r o",
+    "d": "r b b w y w g y w",
+    "b": "y o o b b o y o o",
+    "r": "g r b o r g w r g",
+}
 
 
 def test_cli_rejects_both_facelet_and_color_input(capsys):
@@ -49,3 +63,84 @@ def test_cli_solves_solved_cube_with_shorthand_color_input(capsys):
     captured = capsys.readouterr()
     assert "Cube already solved." in captured.out
     assert "No robot moves needed." in captured.out
+
+
+def test_cli_solves_solved_cube_with_faces_input(capsys):
+    exit_code = main(
+        [
+            "--faces",
+            "--u",
+            SOLVED_U_FACE,
+            "--r",
+            SOLVED_R_FACE,
+            "--f",
+            SOLVED_F_FACE,
+            "--d",
+            SOLVED_D_FACE,
+            "--l",
+            SOLVED_L_FACE,
+            "--b",
+            SOLVED_B_FACE,
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Cube already solved." in captured.out
+
+
+def test_cli_rejects_faces_with_colors_conflict(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(["--faces", "--colors", SOLVED_COLOR_STATE, "--u", SOLVED_U_FACE])
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "either --colors or --faces" in captured.err
+
+
+def test_cli_rejects_missing_face_argument_in_faces_mode(capsys):
+    with pytest.raises(SystemExit) as exc_info:
+        main(
+            [
+                "--faces",
+                "--u",
+                SOLVED_U_FACE,
+                "--r",
+                SOLVED_R_FACE,
+                "--f",
+                SOLVED_F_FACE,
+                "--d",
+                SOLVED_D_FACE,
+                "--l",
+                SOLVED_L_FACE,
+            ]
+        )
+
+    assert exc_info.value.code == 2
+    captured = capsys.readouterr()
+    assert "--faces requires all six face arguments" in captured.err
+
+
+def test_cli_real_sample_faces_do_not_fail_as_impossible(capsys):
+    exit_code = main(
+        [
+            "--faces",
+            "--u",
+            RAW_SAMPLE_FACES["u"],
+            "--f",
+            RAW_SAMPLE_FACES["f"],
+            "--l",
+            RAW_SAMPLE_FACES["l"],
+            "--d",
+            RAW_SAMPLE_FACES["d"],
+            "--b",
+            RAW_SAMPLE_FACES["b"],
+            "--r",
+            RAW_SAMPLE_FACES["r"],
+        ]
+    )
+
+    assert exit_code == 0
+    captured = capsys.readouterr()
+    assert "Solution:" in captured.out
+    assert "Robot commands:" in captured.out

@@ -2,13 +2,15 @@
 
 Python scaffold for solving a Rubik's Cube from either a manual 54-character cube state
 string or a 54-sticker color-name state. Current version validates input, converts color
-input into the internal Kociemba facelet format, solves the cube with the `kociemba`
-package, and converts the solution into simple robot-friendly color and angle commands.
+input or manual per-face input into the internal Kociemba facelet format, solves the cube
+with the `kociemba` package, and converts the solution into simple robot-friendly color and
+angle commands.
 
 ## What This Project Does Right Now
 
 - Accepts a cube state string in standard Kociemba facelet order.
 - Accepts a 54-sticker color input string with fast one-letter tokens or full color names and converts it into facelets.
+- Accepts manual picture-assisted `--faces` input for one face at a time.
 - Validates basic input rules before solving.
 - Solves the cube with the `kociemba` Python package.
 - Prints standard Rubik's Cube notation such as `R U R' U'`.
@@ -33,6 +35,7 @@ Robot-friendly output currently means:
 
 Image capture from 2 pictures with 3 visible faces per picture is planned for a later step.
 Color-name input is a bridge toward that future image-detection step.
+Manual `--faces` input is a bridge between real sample photos and future automatic image reading.
 The motor-control layer will come later after the robot mechanism is known.
 
 ## Install
@@ -67,6 +70,12 @@ Solve a cube from 54 full color names:
 
 ```bash
 python -m rubiks_solver.cli --colors "white white white white white white white white white red red red red red red red red red green green green green green green green green green yellow yellow yellow yellow yellow yellow yellow yellow yellow orange orange orange orange orange orange orange orange orange blue blue blue blue blue blue blue blue blue"
+```
+
+Solve a cube from six manually read faces using current picture preset:
+
+```bash
+python -m rubiks_solver.cli --faces --u "y y g y w b r y w" --f "b g w g g w y r r" --l "o w r g o b b r o" --d "r b b w y w g y w" --b "y o o b b o y o o" --r "g r b o r g w r g"
 ```
 
 If the string is invalid, the CLI prints a simple error.
@@ -126,6 +135,30 @@ Color input rules:
 - Input is case-insensitive.
 - Each accepted color must appear exactly 9 times.
 - One-letter shorthand is the main fast input format.
+
+### Manual Face Input
+
+`--faces` is manual picture-assisted input, not image processing.
+You enter each face separately with `--u`, `--r`, `--f`, `--d`, `--l`, and `--b`.
+
+Current real capture workflow uses default preset `capture-v1`.
+It currently applies these face rotations before assembly:
+
+- `U` = rotate counter-clockwise
+- `R` = keep
+- `F` = keep
+- `D` = keep
+- `L` = rotate counter-clockwise
+- `B` = rotate 180
+
+This matches the current sample photos:
+
+- `U` = white face
+- `F` = green face
+- `L` = orange face
+- `D` = yellow face
+- `B` = blue face
+- `R` = red face
 
 ## Example Output
 
@@ -193,12 +226,14 @@ rubiks_solver/
   __init__.py
   color_state.py
   cli.py
+  face_input.py
   robot_moves.py
   solver.py
   validation.py
 tests/
   test_cli.py
   test_color_state.py
+  test_face_input.py
   test_robot_moves.py
   test_solver.py
   test_validation.py

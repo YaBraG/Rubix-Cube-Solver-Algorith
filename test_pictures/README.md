@@ -4,6 +4,8 @@ This folder contains real cube photos for future image-processing tests.
 
 The current program does not process these pictures yet.
 These images are reference assets for the future two-picture workflow only.
+Users can manually read these pictures and test the solver with `--faces`.
+The program still does not detect sticker colors automatically.
 
 Current capture idea:
 

@@ -12,6 +12,7 @@ This two-photo plan is provisional and may change after more testing.
 Real sample photos now live under `test_pictures/`.
 They are reference assets for manual inspection and future image-processing development.
 The project still does not automatically read these images yet.
+Manual face input is now implemented for users who want to read these photos by hand.
 
 ## Current Confirmed Orientation
 
@@ -65,6 +66,26 @@ Because of that, the current contract is now based on:
 Important challenge:
 
 - Preserving face orientation and sticker ordering between photos is still the hard part.
+
+## Manual Face Input Preset
+
+Current CLI supports manual per-face entry with `--faces`.
+Automatic image reading is still not implemented.
+
+Current preset name:
+
+- `capture-v1`
+
+`capture-v1` currently applies these face rotations before assembly:
+
+- `U` = rotate counter-clockwise
+- `R` = keep
+- `F` = keep
+- `D` = keep
+- `L` = rotate counter-clockwise
+- `B` = rotate 180
+
+These rotation rules were based on the current real sample photos and may change after more tests.
 
 ## Sticker Indexing Inside Each Face
 
