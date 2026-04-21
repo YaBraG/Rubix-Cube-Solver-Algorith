@@ -18,11 +18,22 @@ Sample point templates:
 - `test_pictures/sample_points_photo_1_template.json`
 - `test_pictures/sample_points_photo_2_template.json`
 
-You can copy these templates and adjust the `x` and `y` values to match the real sticker centers.
+These templates are placeholders only.
+Use point picker to create real coordinate JSON files from the sample photos:
+
+```bash
+python -m rubiks_solver.point_picker --image test_pictures/photo_1_white_green_orange.jpg --image-role photo_1 --output test_pictures/sample_points_photo_1.json
+```
+
+```bash
+python -m rubiks_solver.point_picker --image test_pictures/photo_2_yellow_blue_red.jpg --image-role photo_2 --output test_pictures/sample_points_photo_2.json
+```
+
+Then run image sampler to inspect RGB and HSV values from those saved points.
 The sampler can write a JSON report and an optional annotated image:
 
 ```bash
-python -m rubiks_solver.image_sampler --image test_pictures/photo_1_white_green_orange.jpg --points test_pictures/sample_points_photo_1_template.json --output reports/photo_1_samples.json --annotated-output reports/photo_1_samples_annotated.jpg
+python -m rubiks_solver.image_sampler --image test_pictures/photo_1_white_green_orange.jpg --points test_pictures/sample_points_photo_1.json --output reports/photo_1_samples.json --annotated-output reports/photo_1_samples_annotated.jpg
 ```
 
 Current capture idea:

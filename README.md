@@ -239,10 +239,32 @@ It samples manually provided pixel coordinates from an image and writes a JSON r
 It does not detect stickers automatically and it does not solve from images yet.
 This helps inspect lighting, color separation, and red/orange differences before future detection work.
 
+User-assisted point picker lives in `python -m rubiks_solver.point_picker`.
+It opens an image, lets you click sticker centers, and saves a real sample-points JSON file.
+This is still user-assisted, not automatic detection.
+
+Photo 1 picker:
+
+```bash
+python -m rubiks_solver.point_picker --image test_pictures/photo_1_white_green_orange.jpg --image-role photo_1 --output test_pictures/sample_points_photo_1.json
+```
+
+Photo 2 picker:
+
+```bash
+python -m rubiks_solver.point_picker --image test_pictures/photo_2_yellow_blue_red.jpg --image-role photo_2 --output test_pictures/sample_points_photo_2.json
+```
+
 Example command:
 
 ```bash
 python -m rubiks_solver.image_sampler --image test_pictures/photo_1_white_green_orange.jpg --points test_pictures/sample_points_photo_1_template.json --output reports/photo_1_samples.json --annotated-output reports/photo_1_samples_annotated.jpg
+```
+
+Use the generated point file with the sampler:
+
+```bash
+python -m rubiks_solver.image_sampler --image test_pictures/photo_1_white_green_orange.jpg --points test_pictures/sample_points_photo_1.json --output reports/photo_1_samples.json
 ```
 
 Template point files live in:
@@ -263,6 +285,7 @@ rubiks_solver/
   face_input.py
   image_sampler.py
   image_sampling.py
+  point_picker.py
   robot_moves.py
   solver.py
   validation.py
@@ -271,6 +294,7 @@ tests/
   test_color_state.py
   test_face_input.py
   test_image_sampling.py
+  test_point_picker.py
   test_robot_moves.py
   test_solver.py
   test_validation.py
