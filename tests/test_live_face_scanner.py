@@ -5,6 +5,7 @@ from rubiks_solver.live_face_scanner import (
     build_scan_payload,
     classify_hsv_color,
     generate_grid_centers,
+    get_help_summary_text,
     average_patch_rgb,
     save_scan_payload,
 )
@@ -95,3 +96,11 @@ def test_save_scan_payload(tmp_path):
 
     saved = json.loads(output_path.read_text(encoding="utf-8"))
     assert saved["source"] == "live_camera"
+
+
+def test_help_summary_text_matches_controls():
+    text = get_help_summary_text()
+
+    assert "w/a/x/d or arrow keys = move grid" in text
+    assert "s = sample current face" in text
+    assert "WASD" not in text

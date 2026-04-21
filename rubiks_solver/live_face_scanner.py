@@ -170,13 +170,22 @@ def save_scan_payload(output_path: str | Path, payload: dict[str, Any]) -> Path:
 
 def print_help_summary() -> None:
     """Print keyboard help in terminal."""
-    print("Live scanner controls:")
-    print("  q = quit")
-    print("  s = sample current face")
-    print("  WASD or arrow keys = move grid")
-    print("  + / - = increase/decrease grid size")
-    print("  [ / ] = decrease/increase sample patch size")
-    print("  h = print this help")
+    print(get_help_summary_text())
+
+
+def get_help_summary_text() -> str:
+    """Return help summary text for tests and overlays."""
+    return "\n".join(
+        [
+            "Live scanner controls:",
+            "  q = quit",
+            "  s = sample current face",
+            "  w/a/x/d or arrow keys = move grid",
+            "  + / - = increase/decrease grid size",
+            "  [ / ] = decrease/increase sample patch size",
+            "  h = print this help",
+        ]
+    )
 
 
 def draw_overlay(
@@ -233,6 +242,26 @@ def draw_overlay(
         (20, 30),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.8,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        f"grid {size} | patch {sample_patch_size} | face {face or '-'}",
+        (20, 60),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.6,
+        (255, 255, 255),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        frame,
+        "s sample | q quit | h help",
+        (20, 88),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.55,
         (255, 255, 255),
         2,
         cv2.LINE_AA,

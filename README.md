@@ -289,6 +289,14 @@ The center sticker is especially important because it identifies the face color.
 The color classifier is experimental and easy to tune later.
 It does not solve the full cube from camera yet.
 
+Controls:
+
+- `w/a/x/d` or arrow keys move the grid
+- `s` samples the current face
+- `q` quits
+- `+/-` changes grid size
+- `[/]` changes sample patch size
+
 Example commands:
 
 ```bash
