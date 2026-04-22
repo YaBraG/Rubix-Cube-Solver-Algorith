@@ -8,13 +8,16 @@ from rubiks_solver.motor_serial import (
     drain_startup_lines,
     format_config_command,
     format_move_command,
+    format_set_step_delay_command,
     list_serial_ports,
     ping_arduino,
     request_arduino_config,
     resolve_color_motor,
     send_color_angle_commands,
     send_move,
+    set_step_delay,
     validate_angle,
+    validate_step_delay,
 )
 
 
@@ -44,12 +47,19 @@ def test_command_formatting():
     assert format_move_command(0, 90) == "MOVE 0 90"
     assert format_move_command(5, -180) == "MOVE 5 -180"
     assert format_config_command() == "CONFIG?"
+    assert format_set_step_delay_command(2000) == "SET_STEP_DELAY 2000"
 
 
 def test_angle_validation():
     assert validate_angle(90) == 90
     with pytest.raises(MotorSerialError):
         validate_angle(45)
+
+
+def test_step_delay_validation():
+    assert validate_step_delay(2000) == 2000
+    with pytest.raises(MotorSerialError):
+        validate_step_delay(50)
 
 
 def test_color_to_motor_mapping():
@@ -88,6 +98,23 @@ def test_send_color_angle_command_list_uses_mapping():
     assert fake.writes == ["MOVE 0 90\n", "MOVE 1 -90\n"]
 
 
+def test_send_color_angle_commands_waits_between_moves(monkeypatch):
+    fake = FakeSerial(
+        [
+            "OK MOVING 0 90 50",
+            "OK DONE",
+            "OK MOVING 1 -90 50",
+            "OK DONE",
+        ]
+    )
+    delays = []
+    monkeypatch.setattr("rubiks_solver.motor_serial.time.sleep", lambda seconds: delays.append(seconds))
+
+    send_color_angle_commands(fake, [("white", 90), ("red", -90)], delay_between_commands_ms=250)
+
+    assert delays == [0.25]
+
+
 def test_request_config_reads_ok_config_response():
     fake = FakeSerial(
         [
@@ -99,6 +126,15 @@ def test_request_config_reads_ok_config_response():
 
     assert response.startswith("OK CONFIG")
     assert fake.writes == ["CONFIG?\n"]
+
+
+def test_set_step_delay_reads_ok_response():
+    fake = FakeSerial(["OK STEP_DELAY_US 1800"])
+
+    response = set_step_delay(fake, 1800)
+
+    assert response == "OK STEP_DELAY_US 1800"
+    assert fake.writes == ["SET_STEP_DELAY 1800\n"]
 
 
 def test_ping_handles_ok_ready_then_ok_pong():

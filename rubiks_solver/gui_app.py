@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import queue
 import subprocess
 import sys
+import threading
+import time
 import tkinter as tk
 from datetime import datetime
 from pathlib import Path
@@ -24,7 +27,17 @@ from .gui_models import (
     load_editor_faces_from_session,
 )
 from .gui_solver import solve_editor_faces
-from .motor_serial import MotorSerialError, list_serial_ports, ping_arduino_port, send_commands_on_port
+from .motor_serial import (
+    MotorSerialError,
+    list_serial_ports,
+    open_serial_connection,
+    ping_arduino,
+    request_arduino_config,
+    resolve_color_motor,
+    send_move,
+    set_step_delay,
+    validate_step_delay,
+)
 
 
 APP_TITLE = "Rubik's Cube Solver App"
@@ -114,6 +127,264 @@ class ScrollableFrame(ttk.Frame):
             self.canvas.itemconfigure(self.window_id, width=event.width)
 
 
+class ArduinoSenderWindow:
+    def __init__(self, parent: Tk, commands: list[dict[str, int | str]]) -> None:
+        self.parent = parent
+        self.commands = commands
+        self.connection = None
+        self.worker_thread: threading.Thread | None = None
+        self.log_queue: queue.Queue[tuple[str, str]] = queue.Queue()
+        self.connected = False
+        self.sending = False
+
+        self.window = tk.Toplevel(parent)
+        self.window.title("Send To Arduino")
+        self.window.geometry("900x560")
+        self.window.transient(parent)
+
+        self.port_var = StringVar(value="")
+        self.step_delay_var = StringVar(value="2000")
+        self.command_delay_var = StringVar(value="250")
+        self.status_var = StringVar(value="Disconnected.")
+
+        top = ttk.Frame(self.window, padding=10)
+        top.pack(fill="x")
+        ttk.Label(top, text="COM port").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.port_combo = ttk.Combobox(top, textvariable=self.port_var, width=18)
+        self.port_combo.grid(row=0, column=1, sticky="w", padx=(0, 8))
+        self.refresh_button = ttk.Button(top, text="Refresh", command=self.refresh_ports)
+        self.refresh_button.grid(row=0, column=2, padx=4)
+        self.connect_button = ttk.Button(top, text="Connect", command=self.toggle_connection)
+        self.connect_button.grid(row=0, column=3, padx=4)
+
+        tuning = ttk.Frame(self.window, padding=(10, 0, 10, 10))
+        tuning.pack(fill="x")
+        ttk.Label(tuning, text="Motor speed / step delay (us)").grid(row=0, column=0, sticky="w", padx=(0, 6))
+        self.step_delay_entry = ttk.Entry(tuning, textvariable=self.step_delay_var, width=12)
+        self.step_delay_entry.grid(row=0, column=1, sticky="w", padx=(0, 18))
+        ttk.Label(tuning, text="Delay between motor instructions (ms)").grid(row=0, column=2, sticky="w", padx=(0, 6))
+        self.command_delay_entry = ttk.Entry(tuning, textvariable=self.command_delay_var, width=12)
+        self.command_delay_entry.grid(row=0, column=3, sticky="w", padx=(0, 18))
+        self.apply_speed_button = ttk.Button(tuning, text="Apply Speed", command=self.apply_speed)
+        self.apply_speed_button.grid(row=0, column=4, padx=4)
+
+        middle = ttk.Frame(self.window, padding=(10, 0, 10, 10))
+        middle.pack(fill="x")
+        self.send_button = tk.Button(
+            middle,
+            text="Send Solution",
+            command=self.send_solution,
+            bg="#2d7d46",
+            fg="#ffffff",
+            activebackground="#276b3c",
+            activeforeground="#ffffff",
+            font=("Segoe UI", 13, "bold"),
+            padx=24,
+            pady=12,
+            relief="raised",
+            bd=3,
+        )
+        self.send_button.pack(anchor="center")
+
+        ttk.Label(self.window, text="Serial log", font=("Segoe UI", 12, "bold")).pack(anchor="w", padx=10)
+        log_frame = ttk.Frame(self.window, padding=(10, 6, 10, 10))
+        log_frame.pack(fill="both", expand=True)
+        self.log_text = tk.Text(log_frame, wrap="word")
+        log_scroll = ttk.Scrollbar(log_frame, orient="vertical", command=self.log_text.yview)
+        self.log_text.configure(yscrollcommand=log_scroll.set, state="disabled")
+        self.log_text.pack(side="left", fill="both", expand=True)
+        log_scroll.pack(side="right", fill="y")
+
+        ttk.Label(self.window, textvariable=self.status_var, padding=(10, 0, 10, 10)).pack(anchor="w")
+
+        self.refresh_ports()
+        self.update_controls()
+        self.window.protocol("WM_DELETE_WINDOW", self.close_window)
+        self.window.after(100, self.process_log_queue)
+
+    def append_log(self, message: str) -> None:
+        self.log_queue.put(("log", message))
+
+    def process_log_queue(self) -> None:
+        while True:
+            try:
+                kind, value = self.log_queue.get_nowait()
+            except queue.Empty:
+                break
+            if kind == "log":
+                self.log_text.configure(state="normal")
+                self.log_text.insert("end", value + "\n")
+                self.log_text.see("end")
+                self.log_text.configure(state="disabled")
+            elif kind == "status":
+                self.status_var.set(value)
+            elif kind == "connected":
+                self.connected = value == "true"
+                self.update_controls()
+            elif kind == "sending":
+                self.sending = value == "true"
+                self.update_controls()
+            elif kind == "error":
+                messagebox.showerror("Arduino Sender", value, parent=self.window)
+        if self.window.winfo_exists():
+            self.window.after(100, self.process_log_queue)
+
+    def update_controls(self) -> None:
+        connect_text = "Disconnect" if self.connected else "Connect"
+        self.connect_button.config(text=connect_text, state="disabled" if self.sending else "normal")
+        self.send_button.config(state="normal" if self.connected and not self.sending else "disabled")
+        self.apply_speed_button.config(state="normal" if self.connected and not self.sending else "disabled")
+        self.port_combo.config(state="disabled" if self.connected or self.sending else "readonly")
+        self.refresh_button.config(state="disabled" if self.connected or self.sending else "normal")
+
+    def refresh_ports(self) -> None:
+        try:
+            ports = list_serial_ports()
+        except MotorSerialError as exc:
+            self.status_var.set(str(exc))
+            self.port_combo["values"] = ()
+            return
+        self.port_combo["values"] = ports
+        if ports and not self.port_var.get():
+            self.port_var.set(ports[0])
+        self.status_var.set("Ports refreshed." if ports else "No COM ports found.")
+
+    def _run_worker(self, target) -> None:
+        self.worker_thread = threading.Thread(target=target, daemon=True)
+        self.worker_thread.start()
+
+    def toggle_connection(self) -> None:
+        if self.connected:
+            self.disconnect()
+        else:
+            self.connect()
+
+    def connect(self) -> None:
+        port = self.port_var.get().strip()
+        if not port:
+            messagebox.showerror("Arduino Sender", "Choose a COM port first.", parent=self.window)
+            return
+
+        self.log_queue.put(("status", f"Connecting to {port}..."))
+        self._run_worker(lambda: self._connect_worker(port))
+
+    def _connect_worker(self, port: str) -> None:
+        try:
+            connection = open_serial_connection(port)
+            self.append_log(f"Connecting: {port}")
+            self.append_log("TX PING")
+            ping_response = ping_arduino(connection)
+            self.append_log(f"RX {ping_response}")
+            self.append_log("TX CONFIG?")
+            config_response = request_arduino_config(connection)
+            self.append_log(f"RX {config_response}")
+        except Exception as exc:
+            try:
+                connection.close()  # type: ignore[name-defined]
+            except Exception:
+                pass
+            self.log_queue.put(("status", f"Connect failed: {exc}"))
+            self.log_queue.put(("error", str(exc)))
+            return
+
+        self.connection = connection
+        self.log_queue.put(("connected", "true"))
+        self.log_queue.put(("status", f"Connected to {port}."))
+
+    def disconnect(self) -> None:
+        if self.connection is not None:
+            try:
+                self.connection.close()
+            except Exception:
+                pass
+            self.connection = None
+        self.connected = False
+        self.sending = False
+        self.update_controls()
+        self.status_var.set("Disconnected.")
+        self.append_log("Disconnected.")
+
+    def close_window(self) -> None:
+        self.disconnect()
+        if hasattr(self.parent, "sender_window"):
+            self.parent.sender_window = None  # type: ignore[attr-defined]
+        self.window.destroy()
+
+    def _read_step_delay(self) -> int:
+        try:
+            return validate_step_delay(int(self.step_delay_var.get().strip()))
+        except ValueError as exc:
+            raise MotorSerialError("Step delay must be an integer.") from exc
+
+    def _read_command_delay_ms(self) -> int:
+        try:
+            value = int(self.command_delay_var.get().strip())
+        except ValueError as exc:
+            raise MotorSerialError("Delay between instructions must be an integer.") from exc
+        if value < 0:
+            raise MotorSerialError("Delay between instructions must be 0 or greater.")
+        return value
+
+    def apply_speed(self) -> None:
+        if not self.connected or self.connection is None:
+            messagebox.showerror("Arduino Sender", "Connect to Arduino first.", parent=self.window)
+            return
+        try:
+            step_delay = self._read_step_delay()
+        except MotorSerialError as exc:
+            messagebox.showerror("Arduino Sender", str(exc), parent=self.window)
+            return
+        self._run_worker(lambda: self._apply_speed_worker(step_delay))
+
+    def _apply_speed_worker(self, step_delay: int) -> None:
+        try:
+            self.log_queue.put(("sending", "true"))
+            self.append_log(f"TX SET_STEP_DELAY {step_delay}")
+            response = set_step_delay(self.connection, step_delay)
+            self.append_log(f"RX {response}")
+            self.log_queue.put(("status", f"Step delay set to {step_delay} us."))
+        except Exception as exc:
+            self.log_queue.put(("status", f"Apply speed failed: {exc}"))
+            self.log_queue.put(("error", str(exc)))
+        finally:
+            self.log_queue.put(("sending", "false"))
+
+    def send_solution(self) -> None:
+        if not self.connected or self.connection is None:
+            messagebox.showerror("Arduino Sender", "Connect to Arduino first.", parent=self.window)
+            return
+        try:
+            step_delay = self._read_step_delay()
+            delay_between_ms = self._read_command_delay_ms()
+        except MotorSerialError as exc:
+            messagebox.showerror("Arduino Sender", str(exc), parent=self.window)
+            return
+        self._run_worker(lambda: self._send_solution_worker(step_delay, delay_between_ms))
+
+    def _send_solution_worker(self, step_delay: int, delay_between_ms: int) -> None:
+        try:
+            self.log_queue.put(("sending", "true"))
+            self.append_log(f"TX SET_STEP_DELAY {step_delay}")
+            response = set_step_delay(self.connection, step_delay)
+            self.append_log(f"RX {response}")
+            for command in self.commands:
+                color = str(command["color"])
+                angle = int(command["angle"])
+                motor_index = resolve_color_motor(color)
+                self.append_log(f"TX MOVE {motor_index} {angle}  ({color})")
+                for line in send_move(self.connection, motor_index, angle):
+                    self.append_log(f"RX {line}")
+                if delay_between_ms > 0:
+                    self.append_log(f"Wait {delay_between_ms} ms")
+                    time.sleep(delay_between_ms / 1000.0)
+            self.log_queue.put(("status", "Solution sent to Arduino."))
+        except Exception as exc:
+            self.log_queue.put(("status", f"Send failed: {exc}"))
+            self.log_queue.put(("error", str(exc)))
+        finally:
+            self.log_queue.put(("sending", "false"))
+
+
 class RubiksGuiApp:
     def __init__(self, root: Tk) -> None:
         self.root = root
@@ -133,6 +404,7 @@ class RubiksGuiApp:
         self.last_scan_session_dir: Path | None = None
         self.last_scan_settings = {"camera": "0", "grid_size": "", "patch_size": "6"}
         self.latest_result: dict | None = None
+        self.sender_window: ArduinoSenderWindow | None = None
 
         self.container = ttk.Frame(self.root, padding=10)
         self.container.pack(fill="both", expand=True)
@@ -154,8 +426,6 @@ class RubiksGuiApp:
         self.result_heading_var = StringVar()
         self.result_message_var = StringVar()
         self.result_solution_var = StringVar()
-        self.motor_port_var = StringVar(value="")
-        self.motor_status_var = StringVar(value="Motor status: not connected.")
 
         self._build_home_screen()
         self._build_scan_setup_screen()
@@ -248,8 +518,7 @@ class RubiksGuiApp:
 
         self._set_text(self.result_commands_text, command_lines)
         self._set_text(self.result_summary_text, "\n".join(summary_lines))
-        self.refresh_motor_ports()
-        self.update_motor_section_state(result["success"])
+        self.result_send_button.config(state="normal" if result["success"] else "disabled")
         self.result_frame.pack(fill="both", expand=True)
 
     def _build_home_screen(self) -> None:
@@ -506,21 +775,28 @@ class RubiksGuiApp:
         self.result_summary_text = tk.Text(content, height=10, wrap="word")
         self.result_summary_text.pack(fill="both", expand=True, pady=(6, 10))
 
-        ttk.Label(content, text="Motor / Arduino", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        motor_frame = ttk.Frame(content)
-        motor_frame.pack(fill="x", pady=(6, 10))
-        ttk.Label(motor_frame, text="COM port").grid(row=0, column=0, sticky="w", padx=(0, 6), pady=4)
-        self.motor_port_entry = ttk.Combobox(motor_frame, textvariable=self.motor_port_var, width=18)
-        self.motor_port_entry.grid(row=0, column=1, sticky="w", padx=(0, 8), pady=4)
-        self.motor_refresh_button = ttk.Button(motor_frame, text="Refresh Ports", command=self.refresh_motor_ports)
-        self.motor_refresh_button.grid(row=0, column=2, sticky="w", padx=4, pady=4)
-        self.motor_ping_button = ttk.Button(motor_frame, text="Ping Arduino", command=self.ping_motor_port)
-        self.motor_ping_button.grid(row=0, column=3, sticky="w", padx=4, pady=4)
-        self.motor_send_button = ttk.Button(motor_frame, text="Send All Commands", command=self.send_motor_commands)
-        self.motor_send_button.grid(row=0, column=4, sticky="w", padx=4, pady=4)
-        ttk.Label(motor_frame, textvariable=self.motor_status_var, wraplength=860, justify="left").grid(
-            row=1, column=0, columnspan=5, sticky="w", pady=(4, 0)
+        ttk.Label(content, text="Arduino", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        ttk.Label(
+            content,
+            text="Open the Arduino sender window to connect, tune step delay, and send the solved commands.",
+            wraplength=840,
+            justify="left",
+        ).pack(anchor="w", pady=(6, 8))
+        self.result_send_button = tk.Button(
+            content,
+            text="Send to Arduino",
+            command=self.open_sender_window,
+            bg="#1f6aa5",
+            fg="#ffffff",
+            activebackground="#185884",
+            activeforeground="#ffffff",
+            font=("Segoe UI", 12, "bold"),
+            padx=22,
+            pady=10,
+            relief="raised",
+            bd=3,
         )
+        self.result_send_button.pack(anchor="w", pady=(0, 12))
 
         action_bar = ttk.Frame(self.result_frame)
         action_bar.pack(fill="x", pady=(8, 0))
@@ -550,60 +826,19 @@ class RubiksGuiApp:
         self.root.clipboard_append(value)
         self.root.update()
 
-    def refresh_motor_ports(self) -> None:
-        try:
-            ports = list_serial_ports()
-        except MotorSerialError as exc:
-            self.motor_status_var.set(f"Motor status: {exc}")
-            self.motor_port_entry["values"] = ()
-            return
-
-        self.motor_port_entry["values"] = ports
-        if ports and not self.motor_port_var.get():
-            self.motor_port_var.set(ports[0])
-        self.motor_status_var.set("Motor status: ports refreshed." if ports else "Motor status: no COM ports found.")
-
-    def update_motor_section_state(self, solve_success: bool) -> None:
-        state = "normal" if solve_success else "disabled"
-        self.motor_ping_button.config(state=state)
-        self.motor_send_button.config(state=state)
-        self.motor_port_entry.config(state="readonly" if solve_success else "disabled")
-        self.motor_refresh_button.config(state="normal")
-        if not solve_success:
-            self.motor_status_var.set("Motor status: solve must succeed before sending commands.")
-
-    def ping_motor_port(self) -> None:
-        port = self.motor_port_var.get().strip()
-        if not port:
-            self.motor_status_var.set("Motor status: choose a COM port first.")
-            return
-        try:
-            response = ping_arduino_port(port)
-        except MotorSerialError as exc:
-            self.motor_status_var.set(f"Motor status: {exc}")
-            messagebox.showerror("Motor / Arduino", str(exc))
-            return
-        self.motor_status_var.set(f"Motor status: {response} on {port}.")
-
-    def send_motor_commands(self) -> None:
-        port = self.motor_port_var.get().strip()
-        if not port:
-            self.motor_status_var.set("Motor status: choose a COM port first.")
-            return
+    def open_sender_window(self) -> None:
         if not self.latest_result or not self.latest_result.get("success"):
-            self.motor_status_var.set("Motor status: no successful solution available.")
+            messagebox.showerror("Arduino Sender", "Solve the cube successfully before sending commands.")
             return
-        commands = [(item["color"], item["angle"]) for item in self.latest_result.get("commands", [])]
+        commands = self.latest_result.get("commands", [])
         if not commands:
-            self.motor_status_var.set("Motor status: no commands to send.")
+            messagebox.showinfo("Arduino Sender", "This solution has no motor commands to send.")
             return
-        try:
-            send_commands_on_port(port, commands)
-        except MotorSerialError as exc:
-            self.motor_status_var.set(f"Motor status: {exc}")
-            messagebox.showerror("Motor / Arduino", str(exc))
+        if self.sender_window is not None and self.sender_window.window.winfo_exists():
+            self.sender_window.window.lift()
+            self.sender_window.window.focus_force()
             return
-        self.motor_status_var.set(f"Motor status: sent {len(commands)} commands to {port}.")
+        self.sender_window = ArduinoSenderWindow(self.root, commands)
 
     def set_selected_color(self, color: str) -> None:
         self.selected_color.set(color)

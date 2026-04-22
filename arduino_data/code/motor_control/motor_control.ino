@@ -21,7 +21,7 @@ const int STEPS_PER_REV = MOTOR_FULL_STEPS_PER_REV * MICROSTEPS;
 // Tune this live with SET_STEPS90 if 90 degrees needs more or fewer steps.
 int currentStepsPer90 = STEPS_PER_REV / 4;
 // Tune this delay to make the motor faster or more reliable.
-const int STEP_DELAY_US = 2000;
+int currentStepDelayUs = 2000;
 
 bool stopRequested = false;
 
@@ -48,7 +48,7 @@ void printConfig() {
   Serial.print(" STEPS_PER_90=");
   Serial.print(currentStepsPer90);
   Serial.print(" STEP_DELAY_US=");
-  Serial.println(STEP_DELAY_US);
+  Serial.println(currentStepDelayUs);
 }
 
 bool pollStopCommand() {
@@ -86,9 +86,9 @@ void moveMotor(int motorIndex, int angle) {
       break;
     }
     digitalWrite(motorStepPin[motorIndex], HIGH);
-    delayMicroseconds(STEP_DELAY_US);
+    delayMicroseconds(currentStepDelayUs);
     digitalWrite(motorStepPin[motorIndex], LOW);
-    delayMicroseconds(STEP_DELAY_US);
+    delayMicroseconds(currentStepDelayUs);
   }
 
   Serial.println("OK DONE");
@@ -115,6 +115,22 @@ void handleCommand(String command) {
   if (command == "STOP") {
     stopRequested = true;
     Serial.println("OK DONE");
+    return;
+  }
+
+  if (command.startsWith("SET_STEP_DELAY ")) {
+    int stepDelayUs = 0;
+    if (sscanf(command.c_str(), "SET_STEP_DELAY %d", &stepDelayUs) != 1) {
+      Serial.println("ERR bad SET_STEP_DELAY format");
+      return;
+    }
+    if (stepDelayUs < 100 || stepDelayUs > 20000) {
+      Serial.println("ERR invalid STEP_DELAY_US");
+      return;
+    }
+    currentStepDelayUs = stepDelayUs;
+    Serial.print("OK STEP_DELAY_US ");
+    Serial.println(currentStepDelayUs);
     return;
   }
 

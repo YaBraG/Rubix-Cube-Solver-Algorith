@@ -13,6 +13,8 @@ STARTUP_WAIT_SECONDS = 3.0
 PING_RETRIES = 3
 VALID_MOTOR_INDEXES = tuple(range(6))
 VALID_ANGLES = (-180, -90, 90, 180)
+STEP_DELAY_MIN_US = 100
+STEP_DELAY_MAX_US = 20000
 DEFAULT_COLOR_TO_MOTOR_MAP = {
     "white": 0,
     "red": 1,
@@ -48,6 +50,14 @@ def validate_angle(angle: int) -> int:
     return angle
 
 
+def validate_step_delay(step_delay_us: int) -> int:
+    if not STEP_DELAY_MIN_US <= step_delay_us <= STEP_DELAY_MAX_US:
+        raise MotorSerialError(
+            f"Invalid step delay: {step_delay_us}. Use {STEP_DELAY_MIN_US} to {STEP_DELAY_MAX_US} us."
+        )
+    return step_delay_us
+
+
 def format_ping_command() -> str:
     return "PING"
 
@@ -60,6 +70,11 @@ def format_move_command(motor_index: int, angle: int) -> str:
     validate_motor_index(motor_index)
     validate_angle(angle)
     return f"MOVE {motor_index} {angle}"
+
+
+def format_set_step_delay_command(step_delay_us: int) -> str:
+    validate_step_delay(step_delay_us)
+    return f"SET_STEP_DELAY {step_delay_us}"
 
 
 def list_serial_ports() -> list[str]:
@@ -183,6 +198,15 @@ def request_arduino_config(connection: Any) -> str:
     return response
 
 
+def set_step_delay(connection: Any, step_delay_us: int) -> str:
+    command = format_set_step_delay_command(step_delay_us)
+    _write_command(connection, command)
+    response = _expect_ok(_read_response(connection))
+    if not response.startswith("OK STEP_DELAY_US"):
+        raise MotorSerialError(f"Unexpected step delay response: {response}")
+    return response
+
+
 def send_move(connection: Any, motor_index: int, angle: int) -> list[str]:
     command = format_move_command(motor_index, angle)
     _write_command(connection, command)
@@ -208,11 +232,14 @@ def send_color_angle_commands(
     commands: list[tuple[str, int]],
     *,
     color_to_motor_map: dict[str, int] | None = None,
+    delay_between_commands_ms: int = 0,
 ) -> list[list[str]]:
     responses: list[list[str]] = []
-    for color, angle in commands:
+    for index, (color, angle) in enumerate(commands):
         motor_index = resolve_color_motor(color, color_to_motor_map)
         responses.append(send_move(connection, motor_index, angle))
+        if delay_between_commands_ms > 0 and index < len(commands) - 1:
+            time.sleep(delay_between_commands_ms / 1000.0)
     return responses
 
 
@@ -245,16 +272,35 @@ def move_motor_on_port(port: str, motor_index: int, angle: int, *, timeout: floa
         connection.close()
 
 
+def set_step_delay_on_port(
+    port: str,
+    step_delay_us: int,
+    *,
+    timeout: float = SERIAL_TIMEOUT,
+) -> str:
+    connection = open_serial_connection(port, timeout=timeout)
+    try:
+        return set_step_delay(connection, step_delay_us)
+    finally:
+        connection.close()
+
+
 def send_commands_on_port(
     port: str,
     commands: list[tuple[str, int]],
     *,
     timeout: float = SERIAL_TIMEOUT,
     color_to_motor_map: dict[str, int] | None = None,
+    delay_between_commands_ms: int = 0,
 ) -> list[list[str]]:
     connection = open_serial_connection(port, timeout=timeout)
     try:
-        return send_color_angle_commands(connection, commands, color_to_motor_map=color_to_motor_map)
+        return send_color_angle_commands(
+            connection,
+            commands,
+            color_to_motor_map=color_to_motor_map,
+            delay_between_commands_ms=delay_between_commands_ms,
+        )
     finally:
         connection.close()
 
@@ -268,6 +314,12 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--port", help="Serial port such as COM3.")
     parser.add_argument("--ping", action="store_true", help="Ping the Arduino on the selected port.")
     parser.add_argument("--config", action="store_true", help="Read Arduino motor configuration.")
+    parser.add_argument(
+        "--set-step-delay",
+        type=int,
+        metavar="STEP_DELAY_US",
+        help="Set Arduino step delay in microseconds.",
+    )
     parser.add_argument(
         "--timeout",
         type=float,
@@ -308,6 +360,12 @@ def main(argv: list[str] | None = None) -> int:
             if not args.port:
                 parser.error("--config requires --port.")
             print(request_config_on_port(args.port, timeout=args.timeout))
+            return 0
+
+        if args.set_step_delay is not None:
+            if not args.port:
+                parser.error("--set-step-delay requires --port.")
+            print(set_step_delay_on_port(args.port, args.set_step_delay, timeout=args.timeout))
             return 0
 
         if args.move:

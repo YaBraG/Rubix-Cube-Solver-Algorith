@@ -411,7 +411,7 @@ GUI flow:
 - Fixed bottom action bar keeps `Back`, `Reset`, `Clear`, and `Solve` visible
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
 - Result screen shows either solution output or clear error details in scrollable text areas
-- Solve success screen includes COM port tools to ping Arduino and send all motor commands
+- Solve success screen includes a `Send to Arduino` window
 
 Manual mode starts with virtual centers fixed and outer stickers set to unknown.
 Camera Scan mode runs the existing live scan session, then loads the scanned colors into the same editor screen.
@@ -420,7 +420,8 @@ The editor shows live color counts before solving.
 Unknown stickers are reported first, then color-count problems are reported before the solver runs.
 The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
 When Camera Scan is launched from the GUI, scanner output is written to `scanner_log.txt` inside the generated capture session folder instead of filling the terminal.
-The GUI result screen can refresh COM ports, ping Arduino, and send all solved commands in order.
+The editor has a fixed bottom action bar and `Ctrl+Enter` solves.
+The Arduino sender window lets you choose a COM port, connect, read `PING` and `CONFIG?`, set motor speed as Arduino step delay in microseconds, choose a Python-side delay between moves, and send the solved commands with a live serial log.
 
 ## Arduino Motor Control
 
@@ -440,6 +441,7 @@ Serial protocol:
 - `CONFIG?`
 - `MOVE <motor_index> <angle>`
 - `STOP`
+- `SET_STEP_DELAY <value>`
 - `SET_STEPS90 <value>`
 
 Example replies:
@@ -457,12 +459,14 @@ Python serial helper:
 python -m rubiks_solver.motor_serial --list
 python -m rubiks_solver.motor_serial --port COM3 --ping
 python -m rubiks_solver.motor_serial --port COM3 --config
+python -m rubiks_solver.motor_serial --port COM3 --set-step-delay 2000
 python -m rubiks_solver.motor_serial --port COM3 --timeout 5 --ping
 python -m rubiks_solver.motor_serial --port COM3 --move 0 90
 ```
 
 Close Arduino Serial Monitor before using Python or the GUI on the same port.
 If ping times out, try `--timeout 5`.
+Arduino must be re-uploaded after this update because `SET_STEP_DELAY` was added to the sketch.
 
 Default color-to-motor map:
 
@@ -476,8 +480,10 @@ Default color-to-motor map:
 Tuning notes:
 
 - A4988 microstep options are `1`, `2`, `4`, `8`, `16`
-- Arduino `STEP_DELAY_US` controls step speed
+- Arduino `STEP_DELAY_US` controls motor speed in microseconds per half pulse
+- GUI `Delay between instructions` is a Python-side pause between separate motor moves
 - `SET_STEPS90 <value>` lets you tune 90-degree turns without reuploading
+- `SET_STEP_DELAY <value>` lets you tune motor speed without reuploading
 - Arduino direction can be flipped per motor by changing the direction pin logic if hardware rotation is backwards
 - Motor wiring note: `BLK=A+`, `BLU=A-`, `GRN=B+`, `RED=B-`
 - The motor is about `1.5A per phase`, so A4988 current limit must be set physically
