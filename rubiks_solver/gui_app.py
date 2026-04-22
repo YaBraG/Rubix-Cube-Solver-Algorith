@@ -69,6 +69,53 @@ SHORTCUT_LABELS = {
 }
 
 
+def result_debug_starts_hidden() -> bool:
+    return True
+
+
+def result_can_send_to_arduino(result: dict) -> bool:
+    return bool(result.get("success"))
+
+
+def build_sender_done_state() -> tuple[str, str]:
+    return ("DONE - all solution commands sent", "Done. All commands sent.")
+
+
+def build_result_debug_sections(result: dict) -> dict[str, str]:
+    row_lines: list[str] = []
+    for face, face_rows_value in result["rows"].items():
+        row_lines.append(f"{face}:")
+        row_lines.extend(face_rows_value)
+        row_lines.append("")
+
+    if result["success"]:
+        command_text = (
+            "\n".join(f"{item['color']}, {item['angle']}" for item in result["commands"])
+            if result["commands"]
+            else "No robot moves needed."
+        )
+        summary_lines = [
+            "Color counts:",
+            *[f"{color}: {count}" for color, count in result["color_counts"].items()],
+            "",
+            f"Move count: {result['move_count']}",
+        ]
+    else:
+        command_text = result["error"] or ""
+        summary_lines = [
+            "Color counts:",
+            *[f"{color}: {count}" for color, count in result["color_counts"].items()],
+        ]
+        if result["unknown_positions"]:
+            summary_lines.extend(["", "Unknowns:", ", ".join(result["unknown_positions"])])
+
+    return {
+        "rows": "\n".join(row_lines).strip(),
+        "commands": command_text,
+        "summary": "\n".join(summary_lines),
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="rubiks-gui-app",
@@ -377,7 +424,9 @@ class ArduinoSenderWindow:
                 if delay_between_ms > 0:
                     self.append_log(f"Wait {delay_between_ms} ms")
                     time.sleep(delay_between_ms / 1000.0)
-            self.log_queue.put(("status", "Solution sent to Arduino."))
+            done_log, done_status = build_sender_done_state()
+            self.append_log(done_log)
+            self.log_queue.put(("status", done_status))
         except Exception as exc:
             self.log_queue.put(("status", f"Send failed: {exc}"))
             self.log_queue.put(("error", str(exc)))
@@ -426,6 +475,9 @@ class RubiksGuiApp:
         self.result_heading_var = StringVar()
         self.result_message_var = StringVar()
         self.result_solution_var = StringVar()
+        self.result_move_count_var = StringVar()
+        self.result_debug_toggle_var = StringVar(value="Show Debug Details")
+        self.result_debug_visible = not result_debug_starts_hidden()
 
         self._build_home_screen()
         self._build_scan_setup_screen()
@@ -492,33 +544,24 @@ class RubiksGuiApp:
         self.result_solution_var.set(
             result["solution"] or ("Cube already solved." if result["success"] else "")
         )
+        self.result_move_count_var.set(f"Move count: {result['move_count']}" if result["success"] else "")
 
-        self._populate_result_rows(result["rows"])
-
+        debug_sections = build_result_debug_sections(result)
+        self._set_text(self.result_rows_text, debug_sections["rows"])
+        self._set_text(self.result_commands_text, debug_sections["commands"])
+        self._set_text(self.result_summary_text, debug_sections["summary"])
+        self.result_debug_visible = not result_debug_starts_hidden()
+        self._set_debug_visibility(False)
         if result["success"]:
-            command_lines = (
-                "\n".join(f"{item['color']}, {item['angle']}" for item in result["commands"])
-                if result["commands"]
-                else "No robot moves needed."
-            )
-            summary_lines = [
-                "Color counts:",
-                *[f"{color}: {count}" for color, count in result["color_counts"].items()],
-                "",
-                f"Move count: {result['move_count']}",
-            ]
+            self.result_solution_section.pack(fill="x", pady=(0, 12))
+            self.result_move_count_label.pack(anchor="w", pady=(0, 12))
+            self.result_send_button.pack(anchor="w", pady=(0, 12))
         else:
-            command_lines = result["error"] or ""
-            summary_lines = [
-                "Color counts:",
-                *[f"{color}: {count}" for color, count in result["color_counts"].items()],
-            ]
-            if result["unknown_positions"]:
-                summary_lines.extend(["", "Unknowns:", ", ".join(result["unknown_positions"])])
-
-        self._set_text(self.result_commands_text, command_lines)
-        self._set_text(self.result_summary_text, "\n".join(summary_lines))
-        self.result_send_button.config(state="normal" if result["success"] else "disabled")
+            self.result_solution_section.pack_forget()
+            self.result_move_count_label.pack_forget()
+            self.result_send_button.pack_forget()
+        self.result_debug_button.pack(anchor="w", pady=(0, 12))
+        self.result_send_button.config(state="normal" if result_can_send_to_arduino(result) else "disabled")
         self.result_frame.pack(fill="both", expand=True)
 
     def _build_home_screen(self) -> None:
@@ -732,17 +775,13 @@ class RubiksGuiApp:
             justify="left",
         ).pack(anchor="w", pady=(0, 8))
 
-        scroller = ScrollableFrame(self.result_frame, horizontal=False)
-        scroller.pack(fill="both", expand=True)
-        content = scroller.content
+        content = ttk.Frame(self.result_frame)
+        content.pack(fill="both", expand=True)
 
-        ttk.Label(content, text="Final face rows", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.result_rows_text = tk.Text(content, height=12, width=32, wrap="none")
-        self.result_rows_text.pack(fill="x", pady=(6, 10))
-
-        ttk.Label(content, text="Solution", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        solution_frame = ttk.Frame(content)
-        solution_frame.pack(fill="x", pady=(6, 10))
+        self.result_solution_section = ttk.Frame(content)
+        ttk.Label(self.result_solution_section, text="Solution notation", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        solution_frame = ttk.Frame(self.result_solution_section)
+        solution_frame.pack(fill="x", pady=(6, 0))
         ttk.Label(
             solution_frame,
             textvariable=self.result_solution_var,
@@ -755,25 +794,7 @@ class RubiksGuiApp:
             command=lambda: self.copy_text(self.result_solution_var.get()),
         ).pack(side="right", padx=(8, 0))
 
-        ttk.Label(content, text="Commands / Details", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        commands_frame = ttk.Frame(content)
-        commands_frame.pack(fill="both", expand=True, pady=(6, 10))
-        self.result_commands_text = tk.Text(commands_frame, height=14, wrap="word")
-        commands_scroll = ttk.Scrollbar(
-            commands_frame, orient="vertical", command=self.result_commands_text.yview
-        )
-        self.result_commands_text.configure(yscrollcommand=commands_scroll.set)
-        self.result_commands_text.pack(side="left", fill="both", expand=True)
-        commands_scroll.pack(side="right", fill="y")
-        ttk.Button(
-            content,
-            text="Copy Commands",
-            command=lambda: self.copy_text(self.result_commands_text.get("1.0", "end-1c")),
-        ).pack(anchor="w", pady=(0, 12))
-
-        ttk.Label(content, text="Diagnostics", font=("Segoe UI", 12, "bold")).pack(anchor="w")
-        self.result_summary_text = tk.Text(content, height=10, wrap="word")
-        self.result_summary_text.pack(fill="both", expand=True, pady=(6, 10))
+        self.result_move_count_label = ttk.Label(content, textvariable=self.result_move_count_var)
 
         ttk.Label(content, text="Arduino", font=("Segoe UI", 12, "bold")).pack(anchor="w")
         ttk.Label(
@@ -796,7 +817,37 @@ class RubiksGuiApp:
             relief="raised",
             bd=3,
         )
-        self.result_send_button.pack(anchor="w", pady=(0, 12))
+        self.result_debug_button = ttk.Button(
+            content,
+            textvariable=self.result_debug_toggle_var,
+            command=self.toggle_result_debug_details,
+        )
+
+        self.result_debug_section = ScrollableFrame(content, horizontal=False)
+        debug_content = self.result_debug_section.content
+        ttk.Label(debug_content, text="Final face rows", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        self.result_rows_text = tk.Text(debug_content, height=12, width=32, wrap="none")
+        self.result_rows_text.pack(fill="x", pady=(6, 10))
+
+        ttk.Label(debug_content, text="Commands", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        commands_frame = ttk.Frame(debug_content)
+        commands_frame.pack(fill="both", expand=True, pady=(6, 10))
+        self.result_commands_text = tk.Text(commands_frame, height=14, wrap="word")
+        commands_scroll = ttk.Scrollbar(
+            commands_frame, orient="vertical", command=self.result_commands_text.yview
+        )
+        self.result_commands_text.configure(yscrollcommand=commands_scroll.set)
+        self.result_commands_text.pack(side="left", fill="both", expand=True)
+        commands_scroll.pack(side="right", fill="y")
+        ttk.Button(
+            debug_content,
+            text="Copy Commands",
+            command=lambda: self.copy_text(self.result_commands_text.get("1.0", "end-1c")),
+        ).pack(anchor="w", pady=(0, 12))
+
+        ttk.Label(debug_content, text="Diagnostics", font=("Segoe UI", 12, "bold")).pack(anchor="w")
+        self.result_summary_text = tk.Text(debug_content, height=10, wrap="word")
+        self.result_summary_text.pack(fill="both", expand=True, pady=(6, 10))
 
         action_bar = ttk.Frame(self.result_frame)
         action_bar.pack(fill="x", pady=(8, 0))
@@ -807,19 +858,23 @@ class RubiksGuiApp:
             side="left", padx=6
         )
 
-    def _populate_result_rows(self, rows: dict[str, list[str]]) -> None:
-        lines = []
-        for face, face_rows_value in rows.items():
-            lines.append(f"{face}:")
-            lines.extend(face_rows_value)
-            lines.append("")
-        self._set_text(self.result_rows_text, "\n".join(lines).strip())
-
     def _set_text(self, widget: tk.Text, value: str) -> None:
         widget.configure(state="normal")
         widget.delete("1.0", "end")
         widget.insert("1.0", value)
         widget.configure(state="disabled")
+
+    def _set_debug_visibility(self, visible: bool) -> None:
+        self.result_debug_visible = visible
+        if visible:
+            self.result_debug_toggle_var.set("Hide Debug Details")
+            self.result_debug_section.pack(fill="both", expand=True, pady=(0, 12))
+        else:
+            self.result_debug_toggle_var.set("Show Debug Details")
+            self.result_debug_section.pack_forget()
+
+    def toggle_result_debug_details(self) -> None:
+        self._set_debug_visibility(not self.result_debug_visible)
 
     def copy_text(self, value: str) -> None:
         self.root.clipboard_clear()

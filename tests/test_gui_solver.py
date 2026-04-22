@@ -1,8 +1,12 @@
 import json
 
 from rubiks_solver.gui_app import (
+    build_result_debug_sections,
+    build_sender_done_state,
     build_scanner_log_path,
     get_popup_color_options,
+    result_can_send_to_arduino,
+    result_debug_starts_hidden,
     resolve_color_shortcut,
 )
 from rubiks_solver.gui_models import (
@@ -144,6 +148,7 @@ def test_result_payload_creation_for_success():
     assert payload["success"] is True
     assert payload["move_count"] == 2
     assert payload["commands"][0] == {"color": "red", "angle": 90}
+    assert result_can_send_to_arduino(payload) is True
 
 
 def test_result_payload_creation_for_error():
@@ -158,6 +163,39 @@ def test_result_payload_creation_for_error():
 
     assert payload["success"] is False
     assert payload["error"] == "Unknown stickers remain."
+    assert result_can_send_to_arduino(payload) is False
+
+
+def test_result_debug_details_start_hidden():
+    assert result_debug_starts_hidden() is True
+
+
+def test_result_debug_sections_include_success_details():
+    payload = build_result_payload(
+        faces={
+            "U": ["white"] * 9,
+            "R": ["red"] * 9,
+            "F": ["green"] * 9,
+            "D": ["yellow"] * 9,
+            "L": ["orange"] * 9,
+            "B": ["blue"] * 9,
+        },
+        solution="R U",
+        commands=[("red", 90), ("white", 90)],
+    )
+
+    debug_sections = build_result_debug_sections(payload)
+
+    assert "U:" in debug_sections["rows"]
+    assert "red, 90" in debug_sections["commands"]
+    assert "Color counts:" in debug_sections["summary"]
+
+
+def test_sender_done_state_helper():
+    log_line, status_line = build_sender_done_state()
+
+    assert log_line == "DONE - all solution commands sent"
+    assert status_line == "Done. All commands sent."
 
 
 def test_count_editor_colors_orders_known_and_unknown():

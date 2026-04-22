@@ -410,7 +410,7 @@ GUI flow:
 - Cell popup picker for faster color assignment
 - Fixed bottom action bar keeps `Back`, `Reset`, `Clear`, and `Solve` visible
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
-- Result screen shows either solution output or clear error details in scrollable text areas
+- Result screen shows a simplified success or error view first
 - Solve success screen includes a `Send to Arduino` window
 
 Manual mode starts with virtual centers fixed and outer stickers set to unknown.
@@ -418,10 +418,12 @@ Camera Scan mode runs the existing live scan session, then loads the scanned col
 The editor shows live color counts before solving.
 `Ctrl+Enter` solves from the editor.
 Unknown stickers are reported first, then color-count problems are reported before the solver runs.
-The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
+The result screen keeps the main demo flow simple by showing only the solution, move count, main buttons, and Arduino send button by default.
+Debug details such as face rows, command list, color counts, and diagnostics stay hidden behind `Show Debug Details`.
 When Camera Scan is launched from the GUI, scanner output is written to `scanner_log.txt` inside the generated capture session folder instead of filling the terminal.
 The editor has a fixed bottom action bar and `Ctrl+Enter` solves.
 The Arduino sender window lets you choose a COM port, connect, read `PING` and `CONFIG?`, set motor speed as Arduino step delay in microseconds, choose a Python-side delay between moves, and send the solved commands with a live serial log.
+When sending finishes successfully, the sender log ends with `DONE - all solution commands sent`.
 
 ## Arduino Motor Control
 
