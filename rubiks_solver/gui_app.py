@@ -175,6 +175,8 @@ class RubiksGuiApp:
     def show_home(self) -> None:
         self.hide_all_frames()
         self.root.unbind("<Key>")
+        self.root.unbind("<Control-Return>")
+        self.root.unbind("<Control-KP_Enter>")
         self.close_cell_popup()
         self.status_var.set("Choose Manual or Camera Scan.")
         self.home_frame.pack(fill="both", expand=True)
@@ -189,6 +191,8 @@ class RubiksGuiApp:
     def show_scan_setup(self) -> None:
         self.hide_all_frames()
         self.root.unbind("<Key>")
+        self.root.unbind("<Control-Return>")
+        self.root.unbind("<Control-KP_Enter>")
         self.close_cell_popup()
         self.scan_setup_frame.pack(fill="both", expand=True)
 
@@ -197,11 +201,18 @@ class RubiksGuiApp:
         self.refresh_editor()
         self.editor_frame.pack(fill="both", expand=True)
         self.root.bind("<Key>", self.handle_editor_shortcut)
+        self.root.bind("<Control-Return>", self.handle_editor_solve_shortcut)
+        self.root.bind("<Control-KP_Enter>", self.handle_editor_solve_shortcut)
+        self.editor_rescan_button.pack_forget()
+        if self.current_mode == "camera":
+            self.editor_rescan_button.pack(side="left", padx=8, before=self.editor_solve_button)
         self.root.focus_force()
 
     def show_result(self, result: dict) -> None:
         self.hide_all_frames()
         self.root.unbind("<Key>")
+        self.root.unbind("<Control-Return>")
+        self.root.unbind("<Control-KP_Enter>")
         self.close_cell_popup()
         self.latest_result = result
         self.result_heading_var.set("Solve Success" if result["success"] else "Solve Error")
@@ -354,24 +365,6 @@ class RubiksGuiApp:
             label.grid(row=row, column=1, sticky="w", pady=1)
             self.count_labels[color] = label
 
-        actions = ttk.Frame(left_panel)
-        actions.pack(anchor="w", pady=(12, 0))
-        ttk.Button(actions, text="Back", command=self.handle_editor_back).grid(
-            row=0, column=0, padx=4, pady=4, sticky="ew"
-        )
-        ttk.Button(actions, text="Reset", command=self.reset_editor).grid(
-            row=0, column=1, padx=4, pady=4, sticky="ew"
-        )
-        ttk.Button(
-            actions, text="Clear Outer Stickers", command=self.clear_outer_stickers
-        ).grid(row=1, column=0, columnspan=2, padx=4, pady=4, sticky="ew")
-        ttk.Button(actions, text="Rescan", command=self.rescan_current_session).grid(
-            row=2, column=0, columnspan=2, padx=4, pady=4, sticky="ew"
-        )
-        ttk.Button(actions, text="Solve", command=self.solve_current_faces).grid(
-            row=3, column=0, columnspan=2, padx=4, pady=6, sticky="ew"
-        )
-
         right_panel = ttk.Frame(main)
         right_panel.pack(side="left", fill="both", expand=True)
 
@@ -390,6 +383,40 @@ class RubiksGuiApp:
             self._build_face_widget(self.editor_scroll.content, face).grid(
                 row=row, column=column, padx=10, pady=10, sticky="n"
             )
+
+        action_bar = ttk.Frame(self.editor_frame, padding=(0, 8, 0, 0))
+        action_bar.pack(fill="x", side="bottom")
+        self.editor_back_button = ttk.Button(action_bar, text="Back", command=self.handle_editor_back)
+        self.editor_back_button.pack(side="left", padx=(0, 8))
+        self.editor_reset_button = ttk.Button(action_bar, text="Reset", command=self.reset_editor)
+        self.editor_reset_button.pack(side="left", padx=8)
+        self.editor_clear_button = ttk.Button(
+            action_bar,
+            text="Clear Outer Stickers",
+            command=self.clear_outer_stickers,
+        )
+        self.editor_clear_button.pack(side="left", padx=8)
+        self.editor_rescan_button = ttk.Button(
+            action_bar,
+            text="Rescan",
+            command=self.rescan_current_session,
+        )
+        self.editor_rescan_button.pack(side="left", padx=8)
+        self.editor_solve_button = tk.Button(
+            action_bar,
+            text="Solve",
+            command=self.solve_current_faces,
+            bg="#2d7d46",
+            fg="#ffffff",
+            activebackground="#276b3c",
+            activeforeground="#ffffff",
+            font=("Segoe UI", 12, "bold"),
+            padx=28,
+            pady=10,
+            relief="raised",
+            bd=3,
+        )
+        self.editor_solve_button.pack(side="right", padx=(8, 0))
 
     def _build_face_widget(self, parent: ttk.Frame, face: str) -> ttk.Frame:
         frame = ttk.Frame(parent, padding=4, relief="ridge")
@@ -660,6 +687,11 @@ class RubiksGuiApp:
         self.set_selected_color(color)
         self.root.focus_force()
 
+    def handle_editor_solve_shortcut(self, _event: tk.Event) -> str:
+        if self.editor_frame.winfo_manager() != "":
+            self.solve_current_faces()
+        return "break"
+
     def refresh_editor(self) -> None:
         faces = inject_virtual_centers(self.editor_faces)
         for (face, index), button in self.cell_buttons.items():
@@ -705,6 +737,8 @@ class RubiksGuiApp:
     def handle_editor_back(self) -> None:
         self.close_cell_popup()
         self.root.unbind("<Key>")
+        self.root.unbind("<Control-Return>")
+        self.root.unbind("<Control-KP_Enter>")
         if self.current_mode == "camera":
             self.show_scan_setup()
         else:

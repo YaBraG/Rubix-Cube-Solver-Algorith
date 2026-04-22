@@ -408,6 +408,7 @@ GUI flow:
 - Clearly colored clickable cells with centered sticker letters
 - Keyboard shortcuts for colors: `W/Y/G/B/R/O/U` and `1-7`
 - Cell popup picker for faster color assignment
+- Fixed bottom action bar keeps `Back`, `Reset`, `Clear`, and `Solve` visible
 - Camera scan review page pre-fills scanned colors and lets the user correct them manually
 - Result screen shows either solution output or clear error details in scrollable text areas
 - Solve success screen includes COM port tools to ping Arduino and send all motor commands
@@ -415,6 +416,7 @@ GUI flow:
 Manual mode starts with virtual centers fixed and outer stickers set to unknown.
 Camera Scan mode runs the existing live scan session, then loads the scanned colors into the same editor screen.
 The editor shows live color counts before solving.
+`Ctrl+Enter` solves from the editor.
 Unknown stickers are reported first, then color-count problems are reported before the solver runs.
 The result screen shows either the solution and color+angle commands, or the error reason with face rows, color counts, and unknown positions.
 When Camera Scan is launched from the GUI, scanner output is written to `scanner_log.txt` inside the generated capture session folder instead of filling the terminal.
